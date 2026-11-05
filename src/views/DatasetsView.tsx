@@ -25,6 +25,8 @@ interface DatasetsViewProps {
   onOpenUploadModal: () => void;
   onSelectDatasetForExplore: (datasetId: string) => void;
   onDeleteDataset: (datasetId: string) => void;
+  onLoadDemoMode?: () => void;
+  isDemoMode?: boolean;
 }
 
 export const DatasetsView: React.FC<DatasetsViewProps> = ({
@@ -32,7 +34,9 @@ export const DatasetsView: React.FC<DatasetsViewProps> = ({
   onNavigate,
   onOpenUploadModal,
   onSelectDatasetForExplore,
-  onDeleteDataset
+  onDeleteDataset,
+  onLoadDemoMode,
+  isDemoMode
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFormat, setSelectedFormat] = useState<string>('All');
@@ -152,7 +156,17 @@ export const DatasetsView: React.FC<DatasetsViewProps> = ({
       </div>
 
       {/* Dataset List / Grid */}
-      {filteredDatasets.length === 0 ? (
+      {datasets.length === 0 ? (
+        <EmptyState
+          icon={Database}
+          title="Upload your first dataset"
+          description="Connect a CSV or JSON file to start exploring schemas, running SQL queries, and generating predictive models."
+          actionLabel="Connect Dataset"
+          onAction={onOpenUploadModal}
+          secondaryActionLabel={onLoadDemoMode ? "Load Sample Datasets (Demo Mode)" : undefined}
+          onSecondaryAction={onLoadDemoMode}
+        />
+      ) : filteredDatasets.length === 0 ? (
         <EmptyState
           icon={Database}
           title="No matching datasets found"
@@ -177,8 +191,13 @@ export const DatasetsView: React.FC<DatasetsViewProps> = ({
                       <Database className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-semibold text-slate-100 group-hover:text-cyan-300 transition-colors">
-                        {ds.name}
+                      <h3 className="text-sm font-semibold text-slate-100 group-hover:text-cyan-300 transition-colors flex items-center gap-1.5 flex-wrap">
+                        <span>{ds.name}</span>
+                        {ds.isDemo && (
+                          <span className="px-1.5 py-0.2 text-[9px] font-mono uppercase bg-amber-950/70 text-amber-300 border border-amber-800/60 rounded">
+                            Demo
+                          </span>
+                        )}
                       </h3>
                       <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
                         <span className="font-mono">{ds.format}</span>
@@ -295,7 +314,14 @@ export const DatasetsView: React.FC<DatasetsViewProps> = ({
                   <tr key={ds.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="px-4 py-3.5 font-medium text-slate-100">
                       <div>
-                        <span>{ds.name}</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{ds.name}</span>
+                          {ds.isDemo && (
+                            <span className="px-1.5 py-0.2 text-[9px] font-mono uppercase bg-amber-950/70 text-amber-300 border border-amber-800/60 rounded">
+                              Demo
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[11px] text-slate-400 line-clamp-1">{ds.description}</div>
                       </div>
                     </td>

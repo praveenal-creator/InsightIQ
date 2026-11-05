@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Dataset, NavigationId } from '../types';
 import { exportToCsv } from '../utils/exportCsv';
+import { EmptyState } from '../components/common/EmptyState';
 
 interface ExploreDataViewProps {
   datasets: Dataset[];
@@ -21,6 +22,8 @@ interface ExploreDataViewProps {
   onSelectDataset: (id: string) => void;
   onNavigate: (view: NavigationId) => void;
   onNotify?: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
+  onOpenUploadModal?: () => void;
+  onLoadDemoMode?: () => void;
 }
 
 export const ExploreDataView: React.FC<ExploreDataViewProps> = ({
@@ -28,7 +31,9 @@ export const ExploreDataView: React.FC<ExploreDataViewProps> = ({
   selectedDatasetId,
   onSelectDataset,
   onNavigate,
-  onNotify
+  onNotify,
+  onOpenUploadModal,
+  onLoadDemoMode
 }) => {
   const currentDataset = datasets.find(d => d.id === selectedDatasetId) || datasets[0];
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,6 +100,22 @@ export const ExploreDataView: React.FC<ExploreDataViewProps> = ({
       );
     }
   };
+
+  if (!currentDataset || datasets.length === 0) {
+    return (
+      <div className="space-y-6">
+        <EmptyState
+          icon={Table}
+          title="No dataset selected for exploration"
+          description="Upload or select a dataset to inspect raw data rows, filter columns, and sort table partitions."
+          actionLabel="Connect Dataset"
+          onAction={onOpenUploadModal || (() => onNavigate('datasets'))}
+          secondaryActionLabel={onLoadDemoMode ? "Load Sample Datasets (Demo Mode)" : undefined}
+          onSecondaryAction={onLoadDemoMode}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

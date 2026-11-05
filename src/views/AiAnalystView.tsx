@@ -1,29 +1,30 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Sparkles, 
   Send, 
   Database, 
   Bot, 
-  User, 
   Copy, 
   Check, 
   Code2, 
   ArrowRight, 
   Lightbulb, 
   RotateCcw,
-  TrendingDown,
-  TrendingUp,
-  FileText,
   Download
 } from 'lucide-react';
-import { Dataset, NavigationId } from '../types';
+import { Dataset, NavigationId, Analysis } from '../types';
 import { exportAiMessageToCsv, exportToCsv } from '../utils/exportCsv';
+import { normalizeTableName } from '../utils/sqlEngine';
+import { EmptyState } from '../components/common/EmptyState';
 
 interface AiAnalystViewProps {
   datasets: Dataset[];
   onNavigate: (view: NavigationId) => void;
   onRunQueryInPlayground: (sql: string) => void;
   onNotify?: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
+  onSaveAnalysis?: (newAnalysis: Analysis) => void;
+  onOpenUploadModal?: () => void;
+  onLoadDemoMode?: () => void;
 }
 
 interface Message {
@@ -41,8 +42,46 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
   datasets,
   onNavigate,
   onRunQueryInPlayground,
-  onNotify
+  onNotify,
+  onSaveAnalysis,
+  onOpenUploadModal,
+  onLoadDemoMode
 }) => {
+  if (!datasets || datasets.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5">
+          <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-cyan-400" />
+            <span>AI Analyst Intelligence</span>
+          </h1>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Autonomous data discovery and hypothesis testing.
+          </p>
+        </div>
+
+        <EmptyState
+          icon={Sparkles}
+          title="Upload a dataset to discover insights"
+          description="AI Analyst requires an active table in your workspace to synthesize distributions, identify anomalies, and generate SQL queries."
+          actionLabel="Upload Dataset"
+          onAction={onOpenUploadModal}
+        />
+
+        {onLoadDemoMode && (
+          <div className="text-center">
+            <button
+              onClick={onLoadDemoMode}
+              className="text-xs text-cyan-400 hover:text-cyan-300 underline underline-offset-4 cursor-pointer"
+            >
+              Or explore AI Analyst in Demo Mode with pre-indexed sample data
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>(datasets[0]?.id || '');
   const [inputPrompt, setInputPrompt] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -50,6 +89,25 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const selectedDataset = datasets.find(d => d.id === selectedDatasetId) || datasets[0];
+  const targetTable = normalizeTableName(selectedDataset.name);
+
+  const cols = selectedDataset.schema.map(s => s.name);
+  const numericCols = selectedDataset.schema.filter(s => s.type === 'INTEGER' || s.type === 'DECIMAL' || s.type === 'FLOAT').map(s => s.name);
+  const categoryCols = selectedDataset.schema.filter(s => s.type === 'VARCHAR' || s.type === 'BOOLEAN').map(s => s.name);
+
+  // Dynamic suggested prompts based on actual dataset schema
+  const dynamicPrompts = useMemo(() => {
+    const list: string[] = [];
+    if (numericCols.length > 0 && categoryCols.length > 0) {
+      list.push(`Calculate average ${numericCols[0]} grouped by ${categoryCols[0]}`);
+      list.push(`Find top 5 records with highest ${numericCols[0]}`);
+    } else if (cols.length > 1) {
+      list.push(`Analyze distributions across ${cols[0]} and ${cols[1]}`);
+    }
+    list.push(`Generate optimized SQL query for ${targetTable}`);
+    list.push(`Check for missing values and anomalies in ${selectedDataset.name}`);
+    return list;
+  }, [selectedDataset, numericCols, categoryCols, targetTable]);
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -57,8 +115,8 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
       sender: 'assistant',
       timestamp: 'Just now',
       datasetContext: selectedDataset?.name,
-      text: `Hello Dr. Rostova. I am your InsightIQ Data Copilot. I have indexed ${selectedDataset?.name || 'your active dataset'} (${selectedDataset?.rows.toLocaleString()} rows). I can synthesize multi-variable regressions, detect latent anomalies, generate analytical SQL queries, and construct predictive simulations.`,
-      recommendation: 'Select one of the suggested prompts below or ask a natural language question about your metrics.'
+      text: `Hello. I have indexed ${selectedDataset.name} (${selectedDataset.rows.toLocaleString()} records, ${selectedDataset.columns} fields). I can evaluate distributions, detect anomalies, generate analytical SQL queries, and highlight actionable takeaways.`,
+      recommendation: `Try inquiring about column distributions like ${cols.slice(0, 3).join(', ')} or click a suggested prompt below.`
     }
   ]);
 
@@ -70,13 +128,6 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
     scrollToBottom();
   }, [messages, isTyping]);
 
-  const suggestedPrompts = [
-    'Why is churn risk concentrated in accounts with <10 logins weekly?',
-    'Identify top 5 highest grossing customer segments by ARR',
-    'Are there statistical correlations between support tickets and churn probability?',
-    'Generate an optimal SQL query to isolate high-risk enterprise accounts'
-  ];
-
   const handleSendMessage = (textToSend?: string) => {
     const query = textToSend || inputPrompt;
     if (!query.trim()) return;
@@ -86,7 +137,7 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
       sender: 'user',
       timestamp: 'Just now',
       text: query,
-      datasetContext: selectedDataset?.name
+      datasetContext: selectedDataset.name
     };
 
     setMessages(prev => [...prev, userMsg]);
@@ -94,53 +145,59 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
     setIsTyping(true);
 
     setTimeout(() => {
-      let assistantResponse: Message;
+      const topNumCol = numericCols[0] || 'id';
+      const topCatCol = categoryCols[0] || cols[0];
 
-      if (query.toLowerCase().includes('churn') || query.toLowerCase().includes('risk')) {
-        assistantResponse = {
-          id: `ai-${Date.now()}`,
-          sender: 'assistant',
-          timestamp: 'Just now',
-          datasetContext: selectedDataset?.name,
-          text: `Comprehensive survival analysis of ${selectedDataset?.name} demonstrates an inflection point at **Day 42**: accounts averaging under 12 weekly logins experience an **82.4% probability of non-renewal** within their 90-day window. Interestingly, support ticket volume acts as a lagging indicator rather than leading factor.`,
-          metrics: [
-            { label: 'Inflection Threshold', value: '< 12 logins/wk', isPositive: false },
-            { label: 'Renewal Probability', value: '17.6%', isPositive: false },
-            { label: 'Median Monthly ARR at Risk', value: '$18,400', isPositive: false }
-          ],
-          sqlSnippet: `SELECT customer_id, tier, monthly_arr, login_frequency_weekly, churn_risk_score\nFROM ds_saas_cohorts\nWHERE login_frequency_weekly < 12 AND churn_risk_score > 0.60\nORDER BY monthly_arr DESC\nLIMIT 15;`,
-          recommendation: 'Automate a Slack webhook to Customer Success when an account’s 14-day rolling login velocity drops by more than 35%.'
-        };
-      } else if (query.toLowerCase().includes('sql') || query.toLowerCase().includes('query')) {
-        assistantResponse = {
-          id: `ai-${Date.now()}`,
-          sender: 'assistant',
-          timestamp: 'Just now',
-          datasetContext: selectedDataset?.name,
-          text: `Here is the optimized SQL query for ${selectedDataset?.name} with partitioned window aggregates and indexed filtration:`,
-          sqlSnippet: `WITH cohort_summary AS (\n  SELECT \n    tier,\n    COUNT(customer_id) AS total_accounts,\n    ROUND(AVG(monthly_arr), 2) AS avg_arr,\n    ROUND(AVG(churn_risk_score), 3) AS avg_risk\n  FROM ds_saas_cohorts\n  GROUP BY tier\n)\nSELECT * FROM cohort_summary ORDER BY avg_arr DESC;`,
-          recommendation: 'You can test this query directly in the SQL Playground with single-click runtime evaluation.'
-        };
-      } else {
-        assistantResponse = {
-          id: `ai-${Date.now()}`,
-          sender: 'assistant',
-          timestamp: 'Just now',
-          datasetContext: selectedDataset?.name,
-          text: `Analysis across ${selectedDataset?.rows.toLocaleString()} records reveals strong separation across cohorts. Enterprise tiers retain higher ARR elasticity, while Starter and Professional cohorts are sensitive to feature engagement frequency.`,
-          metrics: [
-            { label: 'Sample Volume', value: `${selectedDataset?.rows.toLocaleString()} rows`, isPositive: true },
-            { label: 'Variance Explained', value: '88.4%', isPositive: true },
-            { label: 'Hypothesis Confidence', value: '96.2%', isPositive: true }
-          ],
-          sqlSnippet: `SELECT region, tier, SUM(monthly_arr) AS total_revenue\nFROM ds_saas_cohorts\nGROUP BY region, tier\nORDER BY total_revenue DESC;`,
-          recommendation: 'Consider building a multi-segment visualization or running a Random Forest classifier in the Predictive Lab.'
-        };
+      let generatedSql = `SELECT ${cols.slice(0, 4).join(', ')}\nFROM ${targetTable}\nLIMIT 15;`;
+      if (numericCols.length > 0 && categoryCols.length > 0) {
+        generatedSql = `SELECT ${topCatCol}, COUNT(*) AS total_records, ROUND(AVG(${topNumCol}), 2) AS avg_${topNumCol}\nFROM ${targetTable}\nGROUP BY ${topCatCol}\nORDER BY avg_${topNumCol} DESC\nLIMIT 10;`;
       }
+
+      const rowsCount = selectedDataset.sampleData.length;
+      let calculatedAvg = 0;
+      if (numericCols.length > 0 && rowsCount > 0) {
+        const sum = selectedDataset.sampleData.reduce((acc, r) => acc + (typeof r[topNumCol] === 'number' ? r[topNumCol] : 0), 0);
+        calculatedAvg = Math.round((sum / rowsCount) * 100) / 100;
+      }
+
+      const assistantResponse: Message = {
+        id: `ai-${Date.now()}`,
+        sender: 'assistant',
+        timestamp: 'Just now',
+        datasetContext: selectedDataset.name,
+        text: `Analysis of **${selectedDataset.name}** across ${selectedDataset.rows.toLocaleString()} partition rows shows consistent distribution. Primary variation aligns along **${topCatCol}** with measurable clustering on **${topNumCol}**.`,
+        metrics: [
+          { label: 'Analyzed Rows', value: `${selectedDataset.rows.toLocaleString()} records`, isPositive: true },
+          { label: `Average ${topNumCol}`, value: `${calculatedAvg.toLocaleString()}`, isPositive: true },
+          { label: 'Partition Conformance', value: `${selectedDataset.healthScore}%`, isPositive: true }
+        ],
+        sqlSnippet: generatedSql,
+        recommendation: `Verify variance on ${topCatCol} in the Explore Data view or run the synthesized query in SQL Playground.`
+      };
 
       setMessages(prev => [...prev, assistantResponse]);
       setIsTyping(false);
-    }, 700);
+
+      // Save as completed real analysis record
+      if (onSaveAnalysis) {
+        const saved: Analysis = {
+          id: `ana-${Date.now()}`,
+          title: `${selectedDataset.name}: ${topCatCol} vs ${topNumCol} Analysis`,
+          datasetName: selectedDataset.name,
+          datasetId: selectedDataset.id,
+          summary: `Evaluated ${selectedDataset.rows.toLocaleString()} rows in ${selectedDataset.name}. Primary metric ${topNumCol} averages ${calculatedAvg.toLocaleString()}.`,
+          confidence: 96.5,
+          category: 'Trend',
+          createdAt: 'Just now',
+          keyMetric: topNumCol,
+          metricChange: `Avg: ${calculatedAvg}`,
+          isPositive: true,
+          actionableRecommendation: `Inspect segment breakdown across ${topCatCol} and monitor threshold boundaries.`,
+          isDemo: selectedDataset.isDemo || false
+        };
+        onSaveAnalysis(saved);
+      }
+    }, 450);
   };
 
   const handleCopy = (id: string, text: string) => {
@@ -156,14 +213,14 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
         sender: 'assistant',
         timestamp: 'Just now',
         datasetContext: selectedDataset?.name,
-        text: `Conversation cleared. I am ready to analyze ${selectedDataset?.name} or answer queries.`,
-        recommendation: 'Ask a specific inquiry or explore one of the pre-set prompts.'
+        text: `Conversation cleared. I am ready to analyze ${selectedDataset?.name}.`,
+        recommendation: 'Select a suggested inquiry or ask about specific columns.'
       }
     ]);
   };
 
   const handleExportMessageCsv = (msg: Message) => {
-    const filename = `ai_analysis_${msg.datasetContext ? msg.datasetContext.toLowerCase().replace(/\s+/g, '_') : 'insight'}_${Date.now()}.csv`;
+    const filename = `ai_analysis_${msg.datasetContext ? msg.datasetContext.toLowerCase().replace(/[^a-z0-9]+/g, '_') : 'insight'}_${Date.now()}.csv`;
     const ok = exportAiMessageToCsv(msg, filename);
     if (ok && onNotify) {
       onNotify('Analysis Exported', `Analysis results exported as ${filename}`, 'success');
@@ -206,6 +263,11 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
               <span className="text-[11px] font-mono px-2 py-0.5 bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 rounded">
                 Autonomous Copilot
               </span>
+              {selectedDataset.isDemo && (
+                <span className="text-[11px] font-mono px-2 py-0.5 bg-amber-950/80 text-amber-400 border border-amber-800/60 rounded">
+                  Sample Data
+                </span>
+              )}
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
               Natural language data analysis, automated hypothesis testing, and instant SQL synthesis.
@@ -225,7 +287,7 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
             >
               {datasets.map(d => (
                 <option key={d.id} value={d.id} className="bg-[#0D1424] text-slate-200">
-                  {d.name} ({d.rows.toLocaleString()} rows)
+                  {d.name} {d.isDemo ? '(Demo)' : ''}
                 </option>
               ))}
             </select>
@@ -275,7 +337,7 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
               >
                 <div className="flex items-center justify-between gap-4 text-[11px] text-slate-400">
                   <span className="font-semibold text-slate-300">
-                    {msg.sender === 'user' ? 'Dr. Elena Rostova' : 'InsightIQ Data Copilot'}
+                    {msg.sender === 'user' ? 'Workspace Analyst' : 'InsightIQ Data Copilot'}
                   </span>
                   <div className="flex items-center gap-2">
                     {msg.datasetContext && (
@@ -313,7 +375,7 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
                     <div className="flex items-center justify-between px-3 py-1.5 bg-[#090D1A] border-b border-slate-800 text-[11px] text-slate-400">
                       <div className="flex items-center gap-1.5">
                         <Code2 className="w-3.5 h-3.5 text-cyan-400" />
-                        <span className="font-mono">synthesized_query.sql</span>
+                        <span className="font-mono">{targetTable}_query.sql</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
@@ -379,7 +441,7 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
 
               {msg.sender === 'user' && (
                 <div className="w-8 h-8 rounded-lg bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5">
-                  ER
+                  WA
                 </div>
               )}
             </div>
@@ -400,12 +462,12 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Suggested Prompts strip */}
+        {/* Dynamic Suggested Prompts strip based on actual schema */}
         <div className="p-3 bg-[#080D1A] border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto">
           <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider shrink-0 px-1">
             Suggested Queries:
           </span>
-          {suggestedPrompts.map((p, idx) => (
+          {dynamicPrompts.map((p, idx) => (
             <button
               key={idx}
               onClick={() => handleSendMessage(p)}
@@ -429,7 +491,7 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({
               type="text"
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
-              placeholder={`Ask a question about ${selectedDataset?.name || 'this dataset'} or request hypothesis verification...`}
+              placeholder={`Ask a question about ${selectedDataset.name} or request hypothesis verification...`}
               className="flex-1 bg-[#0D1424] border border-slate-700/80 rounded-lg px-4 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
             />
             <button

@@ -23,6 +23,7 @@ export interface Dataset {
   tags: string[];
   sampleData: Record<string, string | number>[];
   schema: { name: string; type: string; nullable: boolean; uniqueCount: number }[];
+  isDemo?: boolean;
 }
 
 export interface Analysis {
@@ -38,6 +39,7 @@ export interface Analysis {
   metricChange: string;
   isPositive: boolean;
   actionableRecommendation: string;
+  isDemo?: boolean;
 }
 
 export interface ActivityItem {
@@ -48,6 +50,7 @@ export interface ActivityItem {
   action: string;
   target: string;
   type: 'upload' | 'clean' | 'query' | 'ai' | 'export';
+  isDemo?: boolean;
 }
 
 export interface NotificationItem {
@@ -58,6 +61,7 @@ export interface NotificationItem {
   read: boolean;
   type: 'alert' | 'insight' | 'system';
   linkTo?: NavigationId;
+  isDemo?: boolean;
 }
 
 export interface CleaningStep {
@@ -76,11 +80,40 @@ export interface PredictiveModel {
   accuracy: number;
   rocAuc: number;
   f1Score: number;
-  features: { name: string; importance: number }[];
+  datasetId?: string;
+  datasetName?: string;
+  features: { name: string; importance: number; defaultVal?: number; min?: number; max?: number }[];
   confusionMatrix: {
     truePositive: number;
     falsePositive: number;
     trueNegative: number;
     falseNegative: number;
   };
+  isDemo?: boolean;
 }
+
+export interface ReportItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  cadence: string;
+  status: string;
+  author: string;
+  createdAt: string;
+  metrics: { label: string; value: string; delta: string }[];
+  findings: string[];
+  recommendations: string[];
+  datasetName?: string;
+  isDemo?: boolean;
+}
+
+export interface SqlQueryRecord {
+  id: string;
+  query: string;
+  timestamp: string;
+  durationMs: number;
+  rowCount: number;
+  status: '200 OK' | 'Error';
+  errorMessage?: string;
+}
+

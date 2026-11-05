@@ -12,24 +12,30 @@ import {
   TrendingUp, 
   Clock, 
   CheckCircle2, 
-  AlertTriangle,
   FileCode2,
   RefreshCw,
-  Download
+  Download,
+  Inbox,
+  AlertCircle
 } from 'lucide-react';
 import { NavigationId, Dataset, Analysis, ActivityItem } from '../types';
 import { CardSkeleton, TableRowSkeleton } from '../components/common/Skeleton';
 import { Tooltip } from '../components/common/Tooltip';
 import { exportAnalysesToCsv, exportToCsv } from '../utils/exportCsv';
+import { EmptyState } from '../components/common/EmptyState';
 
 interface OverviewViewProps {
   onNavigate: (view: NavigationId) => void;
   datasets: Dataset[];
   analyses: Analysis[];
   activities: ActivityItem[];
+  queryHistoryCount?: number;
+  isDemoMode?: boolean;
   onOpenUploadModal: () => void;
   onSelectDatasetForExplore: (datasetId: string) => void;
   onNotify?: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
+  onLoadDemoMode?: () => void;
+  onExitDemoMode?: () => void;
 }
 
 export const OverviewView: React.FC<OverviewViewProps> = ({
@@ -37,9 +43,13 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   datasets,
   analyses,
   activities,
+  queryHistoryCount = 0,
+  isDemoMode = false,
   onOpenUploadModal,
   onSelectDatasetForExplore,
-  onNotify
+  onNotify,
+  onLoadDemoMode,
+  onExitDemoMode
 }) => {
   const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d' | 'q3'>('7d');
   const [activityFilter, setActivityFilter] = useState<'all' | 'clean' | 'ai' | 'query' | 'upload'>('all');
@@ -49,18 +59,25 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     setIsLoading(true);
     setTimeout(() => {
       setIsLoading(false);
-    }, 600);
+    }, 400);
   };
 
+  // Real KPI calculations
   const totalRows = datasets.reduce((acc, curr) => acc + curr.rows, 0);
-  const avgHealthScore = Math.round(datasets.reduce((acc, curr) => acc + curr.healthScore, 0) / (datasets.length || 1));
+  const avgHealthScore = datasets.length > 0
+    ? Math.round(datasets.reduce((acc, curr) => acc + curr.healthScore, 0) / datasets.length)
+    : 0;
 
   const filteredActivities = activityFilter === 'all' 
     ? activities 
     : activities.filter(a => a.type === activityFilter);
 
   const handleExportAllAnalyses = () => {
-    const filename = `insightiq_recent_analyses_${Date.now()}.csv`;
+    if (analyses.length === 0) {
+      if (onNotify) onNotify('Export Notice', 'No analyses to export.', 'info');
+      return;
+    }
+    const filename = `insightiq_analyses_${Date.now()}.csv`;
     const ok = exportAnalysesToCsv(analyses, filename);
     if (ok && onNotify) {
       onNotify('Analyses Exported', `Exported ${analyses.length} analysis discoveries as ${filename}`, 'success');
@@ -86,9 +103,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Welcome Banner */}
+      {/* Welcome & Context Banner */}
       <div className="relative overflow-hidden bg-gradient-to-r from-[#0C1527] via-[#0E1A33] to-[#0A1324] border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl">
-        {/* Subtle decorative glow */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-blue-600/5 rounded-full blur-2xl pointer-events-none" />
 
@@ -96,7 +112,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">
-                Production Intelligence Hub
+                {isDemoMode ? 'Demo Mode Active' : 'Production Intelligence Hub'}
               </span>
               <span className="text-slate-600">·</span>
               <span className="text-xs text-slate-400 flex items-center gap-1.5">
@@ -105,42 +121,44 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Welcome back, Dr. Elena Rostova
+              {datasets.length === 0
+                ? 'Welcome to InsightIQ Analytics'
+                : 'Workspace Executive Overview'}
             </h1>
             <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">
-              Your automated pipelines processed <span className="text-cyan-300 font-semibold tabular-nums">4.82M rows</span> across 5 active data lakes today. 4 new AI anomaly discoveries require your review.
+              {datasets.length === 0 ? (
+                <span>
+                  No production datasets connected. Ingest your first CSV or JSON file to discover insights, run SQL queries, and construct predictive models.
+                </span>
+              ) : (
+                <span>
+                  Managing <strong className="text-slate-200">{datasets.length} active data tables</strong> with <span className="text-cyan-300 font-semibold tabular-nums">{totalRows.toLocaleString()} indexed records</span> and <span className="text-cyan-300 font-semibold tabular-nums">{analyses.length} completed analyses</span>.
+                </span>
+              )}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 shrink-0">
-            {/* Time filter selector */}
-            <div className="flex items-center p-1 bg-[#080D1A]/80 border border-slate-800 rounded-lg">
-              <Calendar className="w-3.5 h-3.5 text-slate-400 ml-2 mr-1" />
-              {(['7d', '30d', 'q3'] as const).map((range) => (
-                <button
-                  key={range}
-                  onClick={() => setTimeRange(range)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
-                    timeRange === range
-                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {range === '7d' ? 'Last 7d' : range === '30d' ? '30d' : 'Q3 2026'}
-                </button>
-              ))}
-            </div>
-
-            <Tooltip content="Simulate live skeleton refresh">
+            {/* Demo Mode Toggle Button */}
+            {isDemoMode ? (
               <button
                 type="button"
-                onClick={handleSimulateReload}
-                className="p-2 text-slate-400 hover:text-cyan-300 bg-[#080D1A] border border-slate-800 hover:border-slate-700 rounded-lg transition-colors cursor-pointer"
-                aria-label="Refresh overview data"
+                onClick={onExitDemoMode}
+                className="px-3 py-2 text-xs font-semibold text-amber-300 bg-amber-950/40 hover:bg-amber-900/40 border border-amber-800/60 rounded-lg transition-colors cursor-pointer"
               >
-                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-cyan-400' : ''}`} />
+                Exit Demo Mode
               </button>
-            </Tooltip>
+            ) : (
+              onLoadDemoMode && datasets.length === 0 && (
+                <button
+                  type="button"
+                  onClick={onLoadDemoMode}
+                  className="px-3 py-2 text-xs font-medium text-cyan-300 bg-[#080D1A] hover:bg-slate-800 border border-cyan-800/60 rounded-lg transition-colors cursor-pointer"
+                >
+                  Load Demo Mode
+                </button>
+              )
+            )}
 
             <button
               type="button"
@@ -154,7 +172,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </div>
       </div>
 
-      {/* Dataset Summary Cards (4 KPI Cards) */}
+      {/* Dataset Summary Cards (Calculated from Real Data) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {isLoading ? (
           <>
@@ -165,7 +183,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </>
         ) : (
           <>
-            {/* Metric Card 1 */}
+            {/* Metric Card 1: Real Datasets */}
             <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5 hover:border-slate-700/80 transition-all">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-slate-400">Total Datasets</span>
@@ -177,18 +195,19 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 <span className="text-2xl font-bold tracking-tight text-white tabular-nums">
                   {datasets.length}
                 </span>
-                <span className="text-xs font-medium text-emerald-400 flex items-center gap-0.5 tabular-nums">
-                  <TrendingUp className="w-3 h-3" />
-                  +2 this mo
+                <span className="text-xs font-medium text-slate-400 tabular-nums">
+                  {datasets.length === 0 ? 'Empty workspace' : `${datasets.filter(d => !d.isDemo).length} Production`}
                 </span>
               </div>
               <div className="mt-2 text-xs text-slate-400 flex items-center justify-between">
-                <span>{(totalRows / 1000000).toFixed(2)}M indexed records</span>
-                <span className="text-cyan-400 font-mono">100% active</span>
+                <span>{totalRows.toLocaleString()} total rows</span>
+                <span className="text-cyan-400 font-mono">
+                  {datasets.length > 0 ? 'Online' : 'Awaiting Ingestion'}
+                </span>
               </div>
             </div>
 
-            {/* Metric Card 2 */}
+            {/* Metric Card 2: Real AI Analyses */}
             <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5 hover:border-slate-700/80 transition-all">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-slate-400">AI Discoveries</span>
@@ -198,20 +217,21 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               </div>
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-2xl font-bold tracking-tight text-white tabular-nums">
-                  342
+                  {analyses.length}
                 </span>
-                <span className="text-xs font-medium text-emerald-400 flex items-center gap-0.5 tabular-nums">
-                  <TrendingUp className="w-3 h-3" />
-                  +18.4%
+                <span className="text-xs font-medium text-cyan-400 tabular-nums">
+                  {analyses.length > 0 ? 'Completed' : 'None yet'}
                 </span>
               </div>
               <div className="mt-2 text-xs text-slate-400 flex items-center justify-between">
-                <span>98.4% avg confidence</span>
-                <span className="text-cyan-400 font-mono">4 critical</span>
+                <span>{analyses.length > 0 ? 'Evaluated in Copilot' : 'Awaiting inquiries'}</span>
+                <span className="text-cyan-400 font-mono">
+                  {analyses.length > 0 ? 'Synthesized' : 'Standby'}
+                </span>
               </div>
             </div>
 
-            {/* Metric Card 3 */}
+            {/* Metric Card 3: Real Hygiene Score */}
             <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5 hover:border-slate-700/80 transition-all">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-slate-400">Data Hygiene Score</span>
@@ -221,37 +241,39 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               </div>
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-2xl font-bold tracking-tight text-white tabular-nums">
-                  {avgHealthScore}%
+                  {datasets.length > 0 ? `${avgHealthScore}%` : '—'}
                 </span>
-                <span className="text-xs font-medium text-emerald-400 flex items-center gap-0.5">
-                  Optimal
+                <span className="text-xs font-medium text-emerald-400">
+                  {datasets.length > 0 ? 'Calculated' : 'No data'}
                 </span>
               </div>
               <div className="mt-2 text-xs text-slate-400 flex items-center justify-between">
-                <span>0 unaddressed anomalies</span>
-                <span className="text-emerald-400 font-mono">Tier 1</span>
+                <span>{datasets.length > 0 ? 'Partition Average' : 'Awaiting schema'}</span>
+                <span className="text-emerald-400 font-mono">
+                  {datasets.length > 0 ? 'Verified' : 'Inactive'}
+                </span>
               </div>
             </div>
 
-            {/* Metric Card 4 */}
+            {/* Metric Card 4: Real SQL Execution Count */}
             <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5 hover:border-slate-700/80 transition-all">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-400">Query Runtime Avg</span>
+                <span className="text-xs font-medium text-slate-400">SQL Queries Executed</span>
                 <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
                   <Terminal className="w-4 h-4" />
                 </div>
               </div>
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-2xl font-bold tracking-tight text-white font-mono tabular-nums">
-                  18ms
+                  {queryHistoryCount}
                 </span>
-                <span className="text-xs font-medium text-emerald-400 flex items-center gap-0.5 tabular-nums">
-                  -4ms MoM
+                <span className="text-xs font-medium text-slate-400 tabular-nums">
+                  {queryHistoryCount > 0 ? 'Session queries' : 'None yet'}
                 </span>
               </div>
               <div className="mt-2 text-xs text-slate-400 flex items-center justify-between">
-                <span>1,480 queries logged</span>
-                <span className="text-purple-400 font-mono">100% cache</span>
+                <span>OLAP engine ready</span>
+                <span className="text-purple-400 font-mono">Sub-20ms</span>
               </div>
             </div>
           </>
@@ -265,7 +287,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             Quick Actions
           </span>
           <span className="text-slate-600">·</span>
-          <span className="text-xs text-slate-400">Direct shortcuts to high-frequency engineering workflows</span>
+          <span className="text-xs text-slate-400">Shortcuts to workspace pipelines and intelligence tools</span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
@@ -327,32 +349,43 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-[#070B16] text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
-                <tr>
-                  <th className="px-4 py-3">Dataset Name</th>
-                  <th className="px-3 py-3">Format</th>
-                  <th className="px-3 py-3 text-right">Rows</th>
-                  <th className="px-3 py-3 text-center">Health</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/50">
-                {isLoading ? (
-                  <>
-                    <TableRowSkeleton columns={5} />
-                    <TableRowSkeleton columns={5} />
-                    <TableRowSkeleton columns={5} />
-                  </>
-                ) : (
-                  datasets.slice(0, 4).map((ds) => (
+          {datasets.length === 0 ? (
+            <div className="p-8">
+              <EmptyState
+                icon={Database}
+                title="No datasets available"
+                description="Upload a CSV or JSON file to start querying, cleaning, and visualizing records."
+                actionLabel="Upload Dataset"
+                onAction={onOpenUploadModal}
+              />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#070B16] text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="px-4 py-3">Dataset Name</th>
+                    <th className="px-3 py-3">Format</th>
+                    <th className="px-3 py-3 text-right">Rows</th>
+                    <th className="px-3 py-3 text-center">Health</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  {datasets.slice(0, 5).map((ds) => (
                     <tr key={ds.id} className="hover:bg-slate-800/40 transition-colors group">
                       <td className="px-4 py-3.5">
                         <div className="flex flex-col">
-                          <span className="font-medium text-slate-100 group-hover:text-cyan-300 transition-colors">
-                            {ds.name}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-slate-100 group-hover:text-cyan-300 transition-colors">
+                              {ds.name}
+                            </span>
+                            {ds.isDemo && (
+                              <span className="text-[9px] px-1 py-0.2 bg-amber-950 text-amber-400 border border-amber-800 rounded font-mono">
+                                Demo
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
                             <Clock className="w-3 h-3" />
                             {ds.updatedAt}
@@ -402,11 +435,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Right 5 Columns: Recent Analyses */}
@@ -415,17 +448,20 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-cyan-400" />
               <h2 className="text-sm font-semibold text-slate-100">Recent AI Analyses</h2>
+              <span className="text-[11px] text-slate-400 font-mono">({analyses.length})</span>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleExportAllAnalyses}
-                className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-cyan-300 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 rounded-md transition-colors cursor-pointer"
-                title="Export all recent analysis results as a CSV file"
-              >
-                <Download className="w-3 h-3 text-cyan-400" />
-                <span>Export CSV</span>
-              </button>
+              {analyses.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleExportAllAnalyses}
+                  className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-cyan-300 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 rounded-md transition-colors cursor-pointer"
+                  title="Export all recent analysis results as a CSV file"
+                >
+                  <Download className="w-3 h-3 text-cyan-400" />
+                  <span>Export CSV</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onNavigate('ai-analyst')}
@@ -437,65 +473,84 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             </div>
           </div>
 
-          <div className="p-4 space-y-3.5 flex-1 overflow-y-auto">
-            {analyses.slice(0, 3).map((item) => (
-              <div
-                key={item.id}
-                className="p-3.5 rounded-lg bg-[#090E1A]/80 border border-slate-800/80 hover:border-slate-700 transition-all space-y-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="text-[10px] font-medium text-cyan-400 uppercase tracking-wider">
-                      {item.category} · {item.datasetName}
-                    </span>
-                    <h3 className="text-xs font-semibold text-slate-100 mt-0.5 leading-snug">
-                      {item.title}
-                    </h3>
+          {analyses.length === 0 ? (
+            <div className="p-8 flex-1 flex items-center justify-center">
+              <EmptyState
+                icon={Sparkles}
+                title="No analyses yet"
+                description="Inquire with the AI Analyst to test hypotheses and generate automated data discoveries."
+                actionLabel="Open AI Analyst"
+                onAction={() => onNavigate('ai-analyst')}
+              />
+            </div>
+          ) : (
+            <div className="p-4 space-y-3.5 flex-1 overflow-y-auto">
+              {analyses.slice(0, 4).map((item) => (
+                <div
+                  key={item.id}
+                  className="p-3.5 rounded-lg bg-[#090E1A]/80 border border-slate-800/80 hover:border-slate-700 transition-all space-y-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-medium text-cyan-400 uppercase tracking-wider">
+                          {item.category} · {item.datasetName}
+                        </span>
+                        {item.isDemo && (
+                          <span className="text-[9px] px-1 bg-amber-950 text-amber-400 border border-amber-800 rounded font-mono">
+                            Demo
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-xs font-semibold text-slate-100 mt-0.5 leading-snug">
+                        {item.title}
+                      </h3>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] text-slate-400 tabular-nums">{item.createdAt}</span>
+                      <div className="text-xs font-mono font-semibold text-cyan-300 tabular-nums">
+                        {item.confidence}% conf
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-[10px] text-slate-400 tabular-nums">{item.createdAt}</span>
-                    <div className="text-xs font-mono font-semibold text-cyan-300 tabular-nums">
-                      {item.confidence}% conf
+
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {item.summary}
+                  </p>
+
+                  <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-400">{item.keyMetric}:</span>
+                      <span className={`text-xs font-mono font-medium ${item.isPositive ? 'text-emerald-400' : 'text-rose-400'} tabular-nums`}>
+                        {item.metricChange}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => handleExportSingleAnalysis(item)}
+                        className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-cyan-300 font-medium cursor-pointer"
+                        title="Download this specific analysis result as a CSV file"
+                      >
+                        <Download className="w-3 h-3 text-cyan-400" />
+                        <span>CSV</span>
+                      </button>
+                      <button
+                        onClick={() => onNavigate('ai-analyst')}
+                        className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium cursor-pointer"
+                      >
+                        Investigate →
+                      </button>
                     </div>
                   </div>
                 </div>
-
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  {item.summary}
-                </p>
-
-                <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-slate-400">{item.keyMetric}:</span>
-                    <span className={`text-xs font-mono font-medium ${item.isPositive ? 'text-emerald-400' : 'text-rose-400'} tabular-nums`}>
-                      {item.metricChange}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => handleExportSingleAnalysis(item)}
-                      className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-cyan-300 font-medium cursor-pointer"
-                      title="Download this specific analysis result as a CSV file"
-                    >
-                      <Download className="w-3 h-3 text-cyan-400" />
-                      <span>CSV</span>
-                    </button>
-                    <button
-                      onClick={() => onNavigate('ai-analyst')}
-                      className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium cursor-pointer"
-                    >
-                      Investigate →
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Activity Timeline */}
+      {/* Activity Timeline (Real Events) */}
       <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between px-5 py-4 border-b border-slate-800/80 bg-[#090E1A] gap-3">
           <div className="flex items-center gap-2.5">
@@ -523,39 +578,53 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </div>
 
         <div className="p-5">
-          <div className="relative border-l border-slate-800 ml-4 space-y-6">
-            {filteredActivities.map((act) => {
-              const iconMap = {
-                clean: <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />,
-                ai: <Sparkles className="w-3.5 h-3.5 text-cyan-400" />,
-                query: <Terminal className="w-3.5 h-3.5 text-purple-400" />,
-                upload: <Upload className="w-3.5 h-3.5 text-blue-400" />,
-                export: <FileCode2 className="w-3.5 h-3.5 text-amber-400" />
-              };
+          {filteredActivities.length === 0 ? (
+            <div className="py-8">
+              <EmptyState
+                icon={Clock}
+                title="No activity recorded yet"
+                description="Completed operations like dataset ingestions, cleaning pipelines, SQL queries, and AI evaluations will appear in this chronological audit log."
+              />
+            </div>
+          ) : (
+            <div className="relative border-l border-slate-800 ml-4 space-y-6">
+              {filteredActivities.map((act) => {
+                const iconMap = {
+                  clean: <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />,
+                  ai: <Sparkles className="w-3.5 h-3.5 text-cyan-400" />,
+                  query: <Terminal className="w-3.5 h-3.5 text-purple-400" />,
+                  upload: <Upload className="w-3.5 h-3.5 text-blue-400" />,
+                  export: <FileCode2 className="w-3.5 h-3.5 text-amber-400" />
+                };
 
-              return (
-                <div key={act.id} className="relative pl-6">
-                  {/* Timeline bullet node */}
-                  <div className="absolute -left-3 top-0.5 w-6 h-6 rounded-full bg-[#080D1A] border border-slate-700 flex items-center justify-center">
-                    {iconMap[act.type]}
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-slate-200">{act.user}</span>
-                      <span className="text-slate-600">·</span>
-                      <span className="text-xs text-slate-400">{act.action}</span>
+                return (
+                  <div key={act.id} className="relative pl-6">
+                    <div className="absolute -left-3 top-0.5 w-6 h-6 rounded-full bg-[#080D1A] border border-slate-700 flex items-center justify-center">
+                      {iconMap[act.type]}
                     </div>
-                    <span className="text-[11px] text-slate-400 tabular-nums">{act.timestamp}</span>
-                  </div>
 
-                  <p className="text-xs font-mono text-slate-300 mt-1 bg-slate-900/60 p-2 rounded border border-slate-800/80">
-                    {act.target}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
+                    <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-200">{act.user}</span>
+                        {act.isDemo && (
+                          <span className="text-[9px] px-1 bg-amber-950 text-amber-400 border border-amber-800 rounded font-mono">
+                            Demo
+                          </span>
+                        )}
+                        <span className="text-slate-600">·</span>
+                        <span className="text-xs text-slate-400">{act.action}</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 tabular-nums">{act.timestamp}</span>
+                    </div>
+
+                    <p className="text-xs font-mono text-slate-300 mt-1 bg-slate-900/60 p-2 rounded border border-slate-800/80">
+                      {act.target}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

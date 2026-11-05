@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   BarChart3, 
   LineChart as LineChartIcon, 
   PieChart as PieChartIcon, 
-  SlidersHorizontal, 
   Download, 
   Database, 
-  Share2,
-  Sparkles
+  Plus,
+  ArrowRight,
+  TrendingUp,
+  SlidersHorizontal
 } from 'lucide-react';
 import { Dataset, NavigationId } from '../types';
+import { EmptyState } from '../components/common/EmptyState';
 
 interface VisualizationsViewProps {
   datasets: Dataset[];
@@ -17,45 +19,130 @@ interface VisualizationsViewProps {
   onSelectDataset: (id: string) => void;
   onNavigate: (view: NavigationId) => void;
   onNotify: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
+  onOpenUploadModal?: () => void;
+  onLoadDemoMode?: () => void;
 }
 
 export const VisualizationsView: React.FC<VisualizationsViewProps> = ({
   datasets,
   selectedDatasetId,
   onSelectDataset,
-  onNotify
+  onNavigate,
+  onNotify,
+  onOpenUploadModal,
+  onLoadDemoMode
 }) => {
+  if (!datasets || datasets.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5">
+          <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-cyan-400" />
+            <span>Visualizations Studio</span>
+          </h1>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Dynamic chart construction and distribution analytics.
+          </p>
+        </div>
+
+        <EmptyState
+          icon={BarChart3}
+          title="No charts created yet"
+          description="Upload your first dataset to start visualizing distributions, segment aggregations, and metric correlations."
+          actionLabel="Upload Dataset"
+          onAction={onOpenUploadModal}
+        />
+
+        {onLoadDemoMode && (
+          <div className="text-center">
+            <button
+              onClick={onLoadDemoMode}
+              className="text-xs text-cyan-400 hover:text-cyan-300 underline underline-offset-4 cursor-pointer"
+            >
+              Or load sample datasets in Demo Mode to test charting capabilities
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const currentDataset = datasets.find(d => d.id === selectedDatasetId) || datasets[0];
+
+  // Identify candidate dimensions (text/category) and metrics (numeric) from actual dataset schema
+  const categoricalCols = currentDataset.schema.filter(s => s.type === 'VARCHAR' || s.type === 'BOOLEAN');
+  const numericCols = currentDataset.schema.filter(s => s.type === 'INTEGER' || s.type === 'DECIMAL' || s.type === 'FLOAT');
+
+  const defaultDimension = categoricalCols[0]?.name || currentDataset.schema[0]?.name || 'category';
+  const defaultMetric = numericCols[0]?.name || 'count';
+
   const [chartType, setChartType] = useState<'bar' | 'area' | 'donut'>('bar');
-  const [dimension, setDimension] = useState<string>('tier');
-  const [metric, setMetric] = useState<string>('monthly_arr');
+  const [dimension, setDimension] = useState<string>(defaultDimension);
+  const [metric, setMetric] = useState<string>(defaultMetric);
+  const [aggregation, setAggregation] = useState<'sum' | 'avg' | 'count'>('sum');
 
-  // Chart demonstration data synthesized from active dataset
-  const barData = [
-    { label: 'Enterprise Plus', value: 36500, count: 504, share: '42%' },
-    { label: 'Enterprise', value: 21300, count: 320, share: '24%' },
-    { label: 'Professional', value: 8000, count: 180, share: '9%' },
-    { label: 'Starter', value: 2150, count: 90, share: '2%' }
-  ];
+  // Dynamically aggregate real dataset values
+  const { chartData, donutData, totalMetricValue, maxBarValue } = useMemo(() => {
+    const rows = currentDataset.sampleData || [];
+    if (rows.length === 0) {
+      return { chartData: [], donutData: [], totalMetricValue: 0, maxBarValue: 1 };
+    }
 
-  const timeSeriesData = [
-    { month: 'Apr', value: 28400, baseline: 25000 },
-    { month: 'May', value: 32100, baseline: 27500 },
-    { month: 'Jun', value: 39800, baseline: 31000 },
-    { month: 'Jul', value: 45200, baseline: 34000 },
-    { month: 'Aug', value: 52400, baseline: 38000 },
-    { month: 'Sep', value: 67950, baseline: 42000 }
-  ];
+    const groupMap = new Map<string, { sum: number; count: number; values: number[] }>();
 
-  const donutData = [
-    { label: 'North America', value: 48, color: '#22D3EE' },
-    { label: 'Europe', value: 28, color: '#3B82F6' },
-    { label: 'Asia Pacific', value: 16, color: '#818CF8' },
-    { label: 'Latin America', value: 8, color: '#A855F7' }
-  ];
+    rows.forEach(r => {
+      const dimVal = r[dimension] !== undefined && r[dimension] !== null ? String(r[dimension]) : 'Unspecified';
+      const metricVal = typeof r[metric] === 'number' ? r[metric] : 1;
 
-  const maxBarValue = Math.max(...barData.map(d => d.value));
-  const maxTimeValue = Math.max(...timeSeriesData.map(d => d.value));
+      if (!groupMap.has(dimVal)) {
+        groupMap.set(dimVal, { sum: 0, count: 0, values: [] });
+      }
+      const entry = groupMap.get(dimVal)!;
+      entry.sum += metricVal;
+      entry.count += 1;
+      entry.values.push(metricVal);
+    });
+
+    const entries = Array.from(groupMap.entries()).map(([label, stats]) => {
+      let finalVal = stats.sum;
+      if (aggregation === 'avg') {
+        finalVal = stats.count > 0 ? Math.round((stats.sum / stats.count) * 100) / 100 : 0;
+      } else if (aggregation === 'count') {
+        finalVal = stats.count;
+      }
+      return {
+        label,
+        value: finalVal,
+        count: stats.count
+      };
+    });
+
+    // Sort descending by value
+    entries.sort((a, b) => b.value - a.value);
+
+    const topEntries = entries.slice(0, 6);
+    const sumTotal = topEntries.reduce((acc, curr) => acc + curr.value, 0) || 1;
+    const maxVal = Math.max(...topEntries.map(e => e.value), 1);
+
+    const palette = ['#22D3EE', '#3B82F6', '#818CF8', '#A855F7', '#EC4899', '#10B981'];
+
+    const formattedDonut = topEntries.map((item, idx) => ({
+      label: item.label,
+      value: Math.round((item.value / sumTotal) * 100),
+      rawVal: item.value,
+      color: palette[idx % palette.length]
+    }));
+
+    return {
+      chartData: topEntries.map(e => ({
+        ...e,
+        share: `${Math.round((e.value / sumTotal) * 100)}%`
+      })),
+      donutData: formattedDonut,
+      totalMetricValue: sumTotal,
+      maxBarValue: maxVal
+    };
+  }, [currentDataset, dimension, metric, aggregation]);
 
   const handleExportChart = () => {
     onNotify('Chart Exported', `Vector visualization for ${currentDataset.name} was downloaded as SVG.`, 'success');
@@ -76,7 +163,7 @@ export const VisualizationsView: React.FC<VisualizationsViewProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Construct high-fidelity analytical charts, compare cohort distributions, and export publication-ready visuals.
+            Construct high-fidelity analytical charts from real records in <span className="text-slate-200 font-medium">{currentDataset.name}</span>.
           </p>
         </div>
 
@@ -90,7 +177,7 @@ export const VisualizationsView: React.FC<VisualizationsViewProps> = ({
             >
               {datasets.map(d => (
                 <option key={d.id} value={d.id} className="bg-[#0D1424] text-slate-200">
-                  {d.name}
+                  {d.name} {d.isDemo ? '(Demo)' : ''}
                 </option>
               ))}
             </select>
@@ -106,7 +193,7 @@ export const VisualizationsView: React.FC<VisualizationsViewProps> = ({
         </div>
       </div>
 
-      {/* Control Strip & Chart Type Selector */}
+      {/* Control Strip & Dynamic Axis Selectors */}
       <div className="bg-[#090F1E] border border-slate-800/80 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
         {/* Chart type tabs */}
         <div className="flex items-center gap-1 p-1 bg-[#060A14] border border-slate-800 rounded-lg">
@@ -117,7 +204,7 @@ export const VisualizationsView: React.FC<VisualizationsViewProps> = ({
             }`}
           >
             <BarChart3 className="w-4 h-4 text-cyan-400" />
-            <span>Cohort Bar</span>
+            <span>Distribution Bar</span>
           </button>
           <button
             onClick={() => setChartType('area')}
@@ -126,7 +213,7 @@ export const VisualizationsView: React.FC<VisualizationsViewProps> = ({
             }`}
           >
             <LineChartIcon className="w-4 h-4 text-blue-400" />
-            <span>Trend Area</span>
+            <span>Sequence Curve</span>
           </button>
           <button
             onClick={() => setChartType('donut')}
@@ -135,35 +222,49 @@ export const VisualizationsView: React.FC<VisualizationsViewProps> = ({
             }`}
           >
             <PieChartIcon className="w-4 h-4 text-purple-400" />
-            <span>Geo Distribution</span>
+            <span>Category Share</span>
           </button>
         </div>
 
-        {/* Dimension & Metric selectors */}
-        <div className="flex items-center gap-3 text-xs">
+        {/* Real Dimensions & Metrics Selection from schema */}
+        <div className="flex flex-wrap items-center gap-3 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-slate-400">Dimension:</span>
+            <span className="text-slate-400">Dimension (X):</span>
             <select
               value={dimension}
               onChange={(e) => setDimension(e.target.value)}
-              className="bg-[#0D1424] border border-slate-700/80 rounded px-2.5 py-1 text-slate-200 focus:outline-none"
+              className="bg-[#0D1424] border border-slate-700/80 rounded px-2.5 py-1 text-slate-200 focus:outline-none cursor-pointer"
             >
-              <option value="tier">Customer Tier</option>
-              <option value="region">Geographic Region</option>
-              <option value="status">Renewal Probability</option>
+              {currentDataset.schema.map(s => (
+                <option key={s.name} value={s.name}>{s.name} ({s.type})</option>
+              ))}
             </select>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-slate-400">Metric:</span>
+            <span className="text-slate-400">Metric (Y):</span>
             <select
               value={metric}
               onChange={(e) => setMetric(e.target.value)}
-              className="bg-[#0D1424] border border-slate-700/80 rounded px-2.5 py-1 text-slate-200 focus:outline-none"
+              className="bg-[#0D1424] border border-slate-700/80 rounded px-2.5 py-1 text-slate-200 focus:outline-none cursor-pointer"
             >
-              <option value="monthly_arr">Monthly ARR ($)</option>
-              <option value="logins">Weekly Login Avg</option>
-              <option value="tickets">Support Tickets</option>
+              {numericCols.map(s => (
+                <option key={s.name} value={s.name}>{s.name}</option>
+              ))}
+              <option value="record_count">Record Frequency (Count)</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">Aggregate:</span>
+            <select
+              value={aggregation}
+              onChange={(e) => setAggregation(e.target.value as any)}
+              className="bg-[#0D1424] border border-slate-700/80 rounded px-2.5 py-1 text-slate-200 focus:outline-none cursor-pointer"
+            >
+              <option value="sum">Sum</option>
+              <option value="avg">Average</option>
+              <option value="count">Count</option>
             </select>
           </div>
         </div>
@@ -174,42 +275,38 @@ export const VisualizationsView: React.FC<VisualizationsViewProps> = ({
         <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
           <div>
             <h3 className="text-base font-semibold text-white">
-              {chartType === 'bar' && 'Monthly Recurring Revenue by Account Tier'}
-              {chartType === 'area' && 'Trailing 6-Month ARR Growth & Baseline Target'}
-              {chartType === 'donut' && 'Customer Geographic Distribution Breakdown'}
+              {metric.toUpperCase()} by {dimension.toUpperCase()} ({aggregation.toUpperCase()})
             </h3>
             <span className="text-xs text-slate-400 mt-0.5 block">
-              Evaluated on {currentDataset.name} · Tabular figures with precision scaling
+              Evaluated on {currentDataset.sampleData.length} records in {currentDataset.name}
             </span>
           </div>
 
           <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400" />
-              <span>Current Partition</span>
+              <span>Real Dataset Distribution</span>
             </span>
-            {chartType === 'area' && (
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-slate-600" />
-                <span>Baseline Quota</span>
-              </span>
-            )}
           </div>
         </div>
 
-        {/* Chart Renderings */}
+        {/* Chart Renderings based on actual dataset calculations */}
         <div className="min-h-[340px] flex items-center justify-center pt-2">
-          {chartType === 'bar' && (
+          {chartData.length === 0 ? (
+            <div className="py-12 text-center text-xs text-slate-500">
+              No non-empty data found for dimension "{dimension}". Select a different field.
+            </div>
+          ) : chartType === 'bar' ? (
             <div className="w-full space-y-4">
-              {barData.map((item) => {
-                const widthPct = Math.round((item.value / maxBarValue) * 100);
+              {chartData.map((item) => {
+                const widthPct = Math.max(Math.round((item.value / maxBarValue) * 100), 4);
                 return (
                   <div key={item.label} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-slate-200">{item.label}</span>
                       <div className="flex items-center gap-3 font-mono">
                         <span className="text-cyan-400 font-semibold tabular-nums">
-                          ${item.value.toLocaleString()}
+                          {typeof item.value === 'number' ? item.value.toLocaleString() : item.value}
                         </span>
                         <span className="text-slate-500 tabular-nums">({item.share})</span>
                       </div>
@@ -220,7 +317,7 @@ export const VisualizationsView: React.FC<VisualizationsViewProps> = ({
                         style={{ width: `${widthPct}%` }}
                       >
                         <span className="text-[10px] font-mono text-slate-950 font-bold hidden sm:inline">
-                          {item.count} accts
+                          {item.count} rows
                         </span>
                       </div>
                     </div>
@@ -228,19 +325,17 @@ export const VisualizationsView: React.FC<VisualizationsViewProps> = ({
                 );
               })}
             </div>
-          )}
-
-          {chartType === 'area' && (
+          ) : chartType === 'area' ? (
             <div className="w-full">
               <svg className="w-full h-64 overflow-visible" viewBox="0 0 600 200">
                 <defs>
-                  <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="areaGradientDynamic" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#22D3EE" stopOpacity="0.4" />
                     <stop offset="100%" stopColor="#22D3EE" stopOpacity="0.0" />
                   </linearGradient>
                 </defs>
 
-                {/* Grid horizontal guidelines */}
+                {/* Grid guidelines */}
                 {[0.25, 0.5, 0.75, 1].map((pct, i) => (
                   <line
                     key={i}
@@ -253,123 +348,93 @@ export const VisualizationsView: React.FC<VisualizationsViewProps> = ({
                   />
                 ))}
 
-                {/* Baseline line */}
-                <path
-                  d="M 20 140 L 130 130 L 240 120 L 350 105 L 460 90 L 570 75"
-                  fill="none"
-                  stroke="#475569"
-                  strokeWidth="2"
-                  strokeDasharray="6 4"
-                />
+                {/* Compute curve path dynamically */}
+                {(() => {
+                  const stepX = 560 / Math.max(chartData.length - 1, 1);
+                  const points = chartData.map((d, idx) => {
+                    const x = 20 + idx * stepX;
+                    const y = 190 - (d.value / maxBarValue) * 160;
+                    return { x, y, val: d.value, label: d.label };
+                  });
 
-                {/* Area fill */}
-                <path
-                  d="M 20 135 L 130 115 L 240 85 L 350 65 L 460 45 L 570 15 L 570 190 L 20 190 Z"
-                  fill="url(#areaGradient)"
-                />
+                  const linePath = points.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                  const areaPath = `${linePath} L ${points[points.length - 1]?.x || 580} 190 L ${points[0]?.x || 20} 190 Z`;
 
-                {/* Actual curve line */}
-                <path
-                  d="M 20 135 L 130 115 L 240 85 L 350 65 L 460 45 L 570 15"
-                  fill="none"
-                  stroke="#22D3EE"
-                  strokeWidth="3.5"
-                />
-
-                {/* Data points */}
-                {[
-                  { x: 20, y: 135, val: '$28.4k' },
-                  { x: 130, y: 115, val: '$32.1k' },
-                  { x: 240, y: 85, val: '$39.8k' },
-                  { x: 350, y: 65, val: '$45.2k' },
-                  { x: 460, y: 45, val: '$52.4k' },
-                  { x: 570, y: 15, val: '$67.9k' }
-                ].map((pt, i) => (
-                  <g key={i}>
-                    <circle cx={pt.x} cy={pt.y} r="5" fill="#0D1424" stroke="#22D3EE" strokeWidth="2.5" />
-                    <text x={pt.x} y={pt.y - 10} fill="#E2E8F0" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                      {pt.val}
-                    </text>
-                  </g>
-                ))}
+                  return (
+                    <>
+                      <path d={areaPath} fill="url(#areaGradientDynamic)" />
+                      <path d={linePath} fill="none" stroke="#22D3EE" strokeWidth="3" />
+                      {points.map((pt, i) => (
+                        <g key={i}>
+                          <circle cx={pt.x} cy={pt.y} r="5" fill="#0D1424" stroke="#22D3EE" strokeWidth="2.5" />
+                          <text x={pt.x} y={pt.y - 10} fill="#E2E8F0" fontSize="10" textAnchor="middle" fontFamily="monospace">
+                            {typeof pt.val === 'number' ? pt.val.toLocaleString() : pt.val}
+                          </text>
+                        </g>
+                      ))}
+                    </>
+                  );
+                })()}
               </svg>
 
               <div className="flex justify-between px-2 pt-4 text-xs font-mono text-slate-400">
-                {timeSeriesData.map(d => (
-                  <span key={d.month}>{d.month} 2026</span>
+                {chartData.map(d => (
+                  <span key={d.label} className="truncate max-w-[80px]">{d.label}</span>
                 ))}
               </div>
             </div>
-          )}
-
-          {chartType === 'donut' && (
+          ) : (
+            /* Donut chart */
             <div className="flex flex-col md:flex-row items-center justify-center gap-12 w-full">
-              {/* Circular SVG Donut */}
               <div className="relative w-52 h-52">
                 <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                  {/* Background track */}
                   <circle cx="50" cy="50" r="38" fill="transparent" stroke="#1E293B" strokeWidth="14" />
-                  {/* Segment 1: North America 48% */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="38"
-                    fill="transparent"
-                    stroke="#22D3EE"
-                    strokeWidth="14"
-                    strokeDasharray="114.6 238.8"
-                    strokeDashoffset="0"
-                  />
-                  {/* Segment 2: Europe 28% */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="38"
-                    fill="transparent"
-                    stroke="#3B82F6"
-                    strokeWidth="14"
-                    strokeDasharray="66.8 238.8"
-                    strokeDashoffset="-114.6"
-                  />
-                  {/* Segment 3: Asia Pacific 16% */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="38"
-                    fill="transparent"
-                    stroke="#818CF8"
-                    strokeWidth="14"
-                    strokeDasharray="38.2 238.8"
-                    strokeDashoffset="-181.4"
-                  />
-                  {/* Segment 4: Latin America 8% */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="38"
-                    fill="transparent"
-                    stroke="#A855F7"
-                    strokeWidth="14"
-                    strokeDasharray="19.1 238.8"
-                    strokeDashoffset="-219.6"
-                  />
+                  {(() => {
+                    const circumference = 2 * Math.PI * 38; // ~238.76
+                    let offsetAccum = 0;
+                    return donutData.map((seg, idx) => {
+                      const strokeDash = (seg.value / 100) * circumference;
+                      const strokeGap = circumference - strokeDash;
+                      const currentOffset = offsetAccum;
+                      offsetAccum -= strokeDash;
+                      return (
+                        <circle
+                          key={idx}
+                          cx="50"
+                          cy="50"
+                          r="38"
+                          fill="transparent"
+                          stroke={seg.color}
+                          strokeWidth="14"
+                          strokeDasharray={`${strokeDash} ${strokeGap}`}
+                          strokeDashoffset={currentOffset}
+                        />
+                      );
+                    });
+                  })()}
                 </svg>
 
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                  <span className="text-2xl font-bold font-mono text-white tabular-nums">48%</span>
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wider">Top Region</span>
+                  <span className="text-xl font-bold font-mono text-white tabular-nums">
+                    {donutData[0]?.value || 0}%
+                  </span>
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wider truncate max-w-[100px]">
+                    {donutData[0]?.label || 'Top Segment'}
+                  </span>
                 </div>
               </div>
 
               {/* Donut Legend */}
-              <div className="space-y-3 w-full max-w-xs">
+              <div className="space-y-2.5 w-full max-w-xs">
                 {donutData.map((d) => (
                   <div key={d.label} className="flex items-center justify-between text-xs p-2 rounded bg-[#090E1A] border border-slate-800">
-                    <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
-                      <span className="font-medium text-slate-200">{d.label}</span>
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                      <span className="font-medium text-slate-200 truncate">{d.label}</span>
                     </div>
-                    <span className="font-mono text-cyan-300 font-semibold tabular-nums">{d.value}%</span>
+                    <span className="font-mono text-cyan-300 font-semibold tabular-nums ml-2">
+                      {d.value}%
+                    </span>
                   </div>
                 ))}
               </div>

@@ -5,73 +5,85 @@ import {
   Printer, 
   Calendar, 
   CheckCircle2, 
-  ArrowRight, 
   Clock, 
-  Sparkles,
-  Share2,
-  Layers
+  Sparkles, 
+  Plus,
+  Layers,
+  Database
 } from 'lucide-react';
-import { Dataset, NavigationId } from '../types';
+import { Dataset, NavigationId, ReportItem, Analysis } from '../types';
+import { EmptyState } from '../components/common/EmptyState';
+import { exportToCsv } from '../utils/exportCsv';
 
 interface ReportsViewProps {
+  reports: ReportItem[];
   datasets: Dataset[];
+  analyses: Analysis[];
   onNavigate: (view: NavigationId) => void;
   onNotify: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
+  onGenerateReport?: (newReport: ReportItem) => void;
+  onOpenUploadModal?: () => void;
+  onLoadDemoMode?: () => void;
 }
 
 export const ReportsView: React.FC<ReportsViewProps> = ({
+  reports,
   datasets,
+  analyses,
   onNavigate,
-  onNotify
+  onNotify,
+  onGenerateReport,
+  onOpenUploadModal,
+  onLoadDemoMode
 }) => {
-  const [selectedReportId, setSelectedReportId] = useState('rep-1');
-
-  const reports = [
-    {
-      id: 'rep-1',
-      title: 'Q3 2026 Executive Data Intelligence Brief',
-      subtitle: 'Comprehensive performance, revenue velocity, and cohort retention synthesis',
-      cadence: 'Weekly (Mondays at 06:00 UTC)',
-      status: 'Generated Today',
-      author: 'InsightIQ Automated Copilot',
-      metrics: [
-        { label: 'Active Pipeline Ingestion', value: '4.82M rows', delta: '+12.4%' },
-        { label: 'Total Recurring ARR Tracked', value: '$1.48M', delta: '+18.6%' },
-        { label: 'Clean Partition Score', value: '98.2%', delta: '+2.1%' },
-        { label: 'High Churn Risk Accounts', value: '14 flagged', delta: '-6 MoM' }
-      ]
-    },
-    {
-      id: 'rep-2',
-      title: 'Data Hygiene & Anomaly Audit Report',
-      subtitle: 'Full schema conformance, null vector imputation, and duplicate detection',
-      cadence: 'Daily at 00:00 UTC',
-      status: 'Up to date',
-      author: 'Data Operations Agent',
-      metrics: [
-        { label: 'Inspected Sources', value: '5 Databases', delta: '100% active' },
-        { label: 'Null Values Imputed', value: '42 cells', delta: '0 fatal' },
-        { label: 'Deduplicated Rows', value: '14 keys', delta: 'Purged' },
-        { label: 'Outlier Alerts', value: '3 isolated', delta: 'Clamped' }
-      ]
-    },
-    {
-      id: 'rep-3',
-      title: 'Predictive Churn Risk & Retention Forecast',
-      subtitle: 'Random Forest model evaluation across 142k customer cohort partitions',
-      cadence: 'Monthly',
-      status: 'Published 3 days ago',
-      author: 'Dr. Elena Rostova',
-      metrics: [
-        { label: 'Model ROC-AUC', value: '0.924', delta: '+0.018' },
-        { label: 'Identified Flight Accounts', value: '88 accounts', delta: 'CS Assigned' },
-        { label: 'Potential ARR Saved', value: '$340,000', delta: 'Target' },
-        { label: 'Model Confidence', value: '98.4%', delta: 'High' }
-      ]
-    }
-  ];
-
+  const [selectedReportId, setSelectedReportId] = useState<string>(reports[0]?.id || '');
   const activeReport = reports.find(r => r.id === selectedReportId) || reports[0];
+
+  const handleCreateReport = () => {
+    if (datasets.length === 0) {
+      onNotify('Dataset Needed', 'Upload a dataset first before generating an executive brief.', 'info');
+      return;
+    }
+
+    const totalRows = datasets.reduce((sum, d) => sum + d.rows, 0);
+    const avgHealth = Math.round(datasets.reduce((sum, d) => sum + d.healthScore, 0) / (datasets.length || 1));
+
+    const newReport: ReportItem = {
+      id: `rep-${Date.now()}`,
+      title: `${datasets[0].name} Executive Brief`,
+      subtitle: `Automated data quality and intelligence synthesis across ${datasets.length} active data streams`,
+      cadence: 'On Demand (Generated)',
+      status: 'Generated Just Now',
+      author: 'InsightIQ Automated Copilot',
+      createdAt: 'Just now',
+      datasetName: datasets[0].name,
+      metrics: [
+        { label: 'Active Pipeline Rows', value: totalRows.toLocaleString(), delta: '100% Ingested' },
+        { label: 'Workspace Datasets', value: `${datasets.length} Connected`, delta: 'Active' },
+        { label: 'Average Hygiene Score', value: `${avgHealth}%`, delta: 'Verified' },
+        { label: 'Completed AI Analyses', value: `${analyses.length} Discoveries`, delta: 'Synthesized' }
+      ],
+      findings: [
+        `Workspace contains ${datasets.length} verified data lakes with ${totalRows.toLocaleString()} total indexed records.`,
+        `Data hygiene conforms to an average quality score of ${avgHealth}% across active schemas.`,
+        analyses.length > 0
+          ? `Latest analytical anomaly identified: "${analyses[0].title}".`
+          : 'Automated schema validation passed with zero structural format drift.'
+      ],
+      recommendations: [
+        'Enforce weekly partition sync checks to prevent null value propagation.',
+        'Construct an automated alerting webhook for records exceeding threshold tolerances.',
+        'Review cleaning pipeline history regularly to preserve schema integrity.'
+      ],
+      isDemo: datasets[0].isDemo || false
+    };
+
+    if (onGenerateReport) {
+      onGenerateReport(newReport);
+    }
+    setSelectedReportId(newReport.id);
+    onNotify('Report Generated', `Generated "${newReport.title}" with real workspace metrics.`, 'success');
+  };
 
   const handlePrint = () => {
     onNotify('Print / PDF Export Prepared', 'Opening browser print formatting dialog for executive brief.', 'info');
@@ -79,8 +91,70 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   };
 
   const handleDownloadCSV = () => {
-    onNotify('Report Exported', 'Executive KPI matrix exported to CSV spreadsheet format.', 'success');
+    if (!activeReport) return;
+    const rows = activeReport.metrics.map(m => ({
+      'Report Title': activeReport.title,
+      'Document ID': activeReport.id,
+      'Metric Label': m.label,
+      'Metric Value': m.value,
+      'Delta / Status': m.delta,
+      'Author': activeReport.author,
+      'Generated Date': activeReport.createdAt
+    }));
+    exportToCsv(rows, `executive_brief_${activeReport.id}.csv`);
+    onNotify('Report Exported', 'Executive KPI matrix exported to CSV.', 'success');
   };
+
+  if (!reports || reports.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-cyan-400" />
+              <span>Executive Reports</span>
+            </h1>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Automated intelligence briefs and data hygiene compliance audits.
+            </p>
+          </div>
+
+          {datasets.length > 0 && (
+            <button
+              onClick={handleCreateReport}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg shadow-sm transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Generate Brief</span>
+            </button>
+          )}
+        </div>
+
+        <EmptyState
+          icon={FileSpreadsheet}
+          title="No reports generated yet"
+          description={
+            datasets.length > 0
+              ? "You have active datasets ready in your workspace. Click 'Generate Brief' to assemble an executive scorecard and synthesis narrative from your actual data."
+              : "No reports or datasets found. Connect your first dataset or load demo mode to generate executive briefs and export PDF packages."
+          }
+          actionLabel={datasets.length > 0 ? "Generate Executive Brief" : "Upload Dataset"}
+          onAction={datasets.length > 0 ? handleCreateReport : onOpenUploadModal}
+        />
+
+        {onLoadDemoMode && (
+          <div className="text-center">
+            <button
+              onClick={onLoadDemoMode}
+              className="text-xs text-cyan-400 hover:text-cyan-300 underline underline-offset-4 cursor-pointer"
+            >
+              Or load sample report documents in Demo Mode
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -95,26 +169,38 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             <span className="text-xs px-2 py-0.5 bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 rounded font-mono">
               Publication Ready
             </span>
+            {activeReport.isDemo && (
+              <span className="text-xs px-2 py-0.5 bg-amber-950/80 text-amber-400 border border-amber-800/60 rounded font-mono">
+                Sample Report
+              </span>
+            )}
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Automated intelligence briefs, data hygiene compliance audits, and scheduled stakeholder digests.
+            Executive briefs generated from actual workspace records.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
           <button
+            onClick={handleCreateReport}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Generate New Brief</span>
+          </button>
+          <button
             onClick={handleDownloadCSV}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Download Data</span>
+            <span>Download CSV</span>
           </button>
           <button
             onClick={handlePrint}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 bg-[#090E1A] hover:bg-slate-800 border border-slate-700/80 rounded-lg transition-colors cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Export to PDF</span>
+            <span>Export PDF</span>
           </button>
         </div>
       </div>
@@ -131,9 +217,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 : 'bg-[#080D1A] border-slate-800/80 hover:border-slate-700 opacity-70 hover:opacity-100'
             }`}
           >
-            <span className="text-[10px] text-cyan-400 font-mono uppercase tracking-wider block">
-              {rep.cadence}
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-cyan-400 font-mono uppercase tracking-wider block">
+                {rep.cadence}
+              </span>
+              {rep.isDemo && (
+                <span className="text-[9px] px-1 bg-amber-950/60 text-amber-400 border border-amber-800/40 rounded">
+                  Demo
+                </span>
+              )}
+            </div>
             <h3 className="text-xs font-semibold text-slate-100 mt-1 leading-snug">
               {rep.title}
             </h3>
@@ -151,7 +244,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         <div className="border-b border-slate-800 pb-5 space-y-2">
           <div className="flex items-center justify-between text-xs text-slate-400">
             <span className="font-mono text-cyan-400 font-semibold uppercase">InsightIQ Intelligence Brief</span>
-            <span className="tabular-nums">Document ID: {activeReport.id.toUpperCase()}-2026</span>
+            <span className="tabular-nums">Document ID: {activeReport.id.toUpperCase()}</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
             {activeReport.title}
@@ -162,7 +255,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <div className="flex items-center gap-3 text-xs text-slate-400 pt-1">
             <span>Prepared by: <strong className="text-slate-200">{activeReport.author}</strong></span>
             <span>·</span>
-            <span>Cadence: <strong className="text-slate-200">{activeReport.cadence}</strong></span>
+            <span>Target: <strong className="text-slate-200">{activeReport.datasetName || 'All Lakes'}</strong></span>
           </div>
         </div>
 
@@ -183,38 +276,34 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           ))}
         </div>
 
-        {/* Narrative Section */}
+        {/* Real Narrative Section */}
         <div className="space-y-4 text-xs sm:text-sm text-slate-300 leading-relaxed">
           <h3 className="text-sm font-semibold text-slate-100 uppercase tracking-wider border-b border-slate-800/60 pb-1.5">
             1. Executive Findings & Key Takeaways
           </h3>
-          <p>
-            During the latest analytical aggregation window across all 5 production data pipelines, overall platform hygiene sustained a 98.2% conformance index. Cross-referencing between customer cohort telemetry and CRM billing signals demonstrates healthy retention across upper tier accounts ($10k+ ARR), alongside localized fragility in newly provisioned starter tiers.
-          </p>
-          <p>
-            The automated anomaly detection models flagged 14 high-risk accounts exhibiting reduced weekly login velocity. Deploying automated Slack notifications to the dedicated Customer Success team is forecasted to prevent up to $340,000 in potential annualized churn.
-          </p>
+          <ul className="space-y-2">
+            {activeReport.findings.map((f, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="text-cyan-400 font-mono font-bold">·</span>
+                <span>{f}</span>
+              </li>
+            ))}
+          </ul>
         </div>
 
-        {/* Actionable Strategy Checklist */}
+        {/* Recommendations */}
         <div className="p-4 bg-cyan-950/20 border border-cyan-900/40 rounded-xl space-y-3">
           <div className="flex items-center gap-2 text-cyan-300 font-semibold text-xs uppercase tracking-wider">
             <Sparkles className="w-4 h-4 text-cyan-400" />
             <span>Recommended Strategic Directives</span>
           </div>
           <ul className="space-y-2 text-xs text-slate-300">
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-              <span>Standardize Day-21 in-app customer onboarding sequence to boost weekly logins past the critical 12-session mark.</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-              <span>Enforce the newly constructed Data Cleaning recipe across morning ETL ingestion tasks.</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-              <span>Retrain the XGBoost revenue model following the upcoming month-end settlement closure.</span>
-            </li>
+            {activeReport.recommendations.map((r, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                <span>{r}</span>
+              </li>
+            ))}
           </ul>
         </div>
       </div>

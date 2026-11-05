@@ -1,8 +1,13 @@
-import { Dataset, Analysis, ActivityItem, NotificationItem, PredictiveModel } from '../types';
+import { Dataset, Analysis, ActivityItem, NotificationItem, PredictiveModel, ReportItem } from '../types';
 
-export const INITIAL_DATASETS: Dataset[] = [
+/**
+ * SAMPLE / DEMO DATASETS
+ * These are preserved strictly for Demo Mode and testing.
+ * They are clearly flagged with isDemo: true and never mixed with real production records.
+ */
+export const SAMPLE_DATASETS: Dataset[] = [
   {
-    id: 'ds-saas-cohorts',
+    id: 'ds-demo-saas',
     name: 'SaaS Customer Cohorts 2026',
     description: 'Enterprise subscription lifecycle data with recurring ARR, churn indicators, and usage frequencies.',
     format: 'CSV',
@@ -11,7 +16,8 @@ export const INITIAL_DATASETS: Dataset[] = [
     size: '28.4 MB',
     updatedAt: '12 mins ago',
     healthScore: 98,
-    tags: ['Subscriptions', 'ARR', 'Churn'],
+    tags: ['Demo', 'Subscriptions', 'ARR'],
+    isDemo: true,
     schema: [
       { name: 'customer_id', type: 'VARCHAR', nullable: false, uniqueCount: 142850 },
       { name: 'tier', type: 'VARCHAR', nullable: false, uniqueCount: 4 },
@@ -34,7 +40,7 @@ export const INITIAL_DATASETS: Dataset[] = [
     ]
   },
   {
-    id: 'ds-ecommerce-orders',
+    id: 'ds-demo-ecommerce',
     name: 'E-Commerce Global Orders Q3',
     description: 'Omnichannel consumer transactions including item categories, basket sizes, discount ratios, and delivery fulfillment.',
     format: 'Parquet',
@@ -43,7 +49,8 @@ export const INITIAL_DATASETS: Dataset[] = [
     size: '148.2 MB',
     updatedAt: '45 mins ago',
     healthScore: 96,
-    tags: ['Retail', 'Orders', 'Revenue'],
+    tags: ['Demo', 'Retail', 'Revenue'],
+    isDemo: true,
     schema: [
       { name: 'order_id', type: 'VARCHAR', nullable: false, uniqueCount: 1240390 },
       { name: 'gross_value', type: 'DECIMAL', nullable: false, uniqueCount: 12400 },
@@ -62,7 +69,7 @@ export const INITIAL_DATASETS: Dataset[] = [
     ]
   },
   {
-    id: 'ds-fraud-ledger',
+    id: 'ds-demo-fraud',
     name: 'Financial Fraud Risk Ledger',
     description: 'High-volume transaction logs with calculated anomaly risk vectors, IP geolocation deviation, and velocity metrics.',
     format: 'Snowflake',
@@ -71,7 +78,8 @@ export const INITIAL_DATASETS: Dataset[] = [
     size: '92.0 MB',
     updatedAt: '2 hours ago',
     healthScore: 99,
-    tags: ['FinTech', 'Compliance', 'Security'],
+    tags: ['Demo', 'FinTech', 'Security'],
+    isDemo: true,
     schema: [
       { name: 'txn_id', type: 'VARCHAR', nullable: false, uniqueCount: 840500 },
       { name: 'amount_usd', type: 'DECIMAL', nullable: false, uniqueCount: 9500 },
@@ -86,64 +94,15 @@ export const INITIAL_DATASETS: Dataset[] = [
       { txn_id: 'TXN-77403', amount_usd: 340, geo_distance_km: 3, device_risk_tier: 'Low', rule_flagged: 'False', settlement_delay_sec: 8 },
       { txn_id: 'TXN-77404', amount_usd: 21000, geo_distance_km: 1950, device_risk_tier: 'Medium', rule_flagged: 'True', settlement_delay_sec: 90 }
     ]
-  },
-  {
-    id: 'ds-iot-fleet',
-    name: 'IoT Sensor Fleet Telemetry',
-    description: 'Industrial motor sensor time-series measuring temperature anomalies, rotational vibration, and power draws.',
-    format: 'BigQuery',
-    rows: 2540000,
-    columns: 6,
-    size: '410.5 MB',
-    updatedAt: '3 hours ago',
-    healthScore: 94,
-    tags: ['Industrial', 'Sensors', 'Predictive Maintenance'],
-    schema: [
-      { name: 'device_id', type: 'VARCHAR', nullable: false, uniqueCount: 500 },
-      { name: 'temperature_c', type: 'FLOAT', nullable: false, uniqueCount: 650 },
-      { name: 'rpm', type: 'INTEGER', nullable: false, uniqueCount: 1800 },
-      { name: 'vibration_rms', type: 'FLOAT', nullable: false, uniqueCount: 420 },
-      { name: 'power_draw_kw', type: 'FLOAT', nullable: false, uniqueCount: 310 },
-      { name: 'maintenance_status', type: 'VARCHAR', nullable: false, uniqueCount: 3 }
-    ],
-    sampleData: [
-      { device_id: 'SEN-091', temperature_c: 68.4, rpm: 3450, vibration_rms: 0.18, power_draw_kw: 14.2, maintenance_status: 'Nominal' },
-      { device_id: 'SEN-092', temperature_c: 89.1, rpm: 3620, vibration_rms: 0.74, power_draw_kw: 19.8, maintenance_status: 'Warning' },
-      { device_id: 'SEN-093', temperature_c: 65.2, rpm: 3400, vibration_rms: 0.15, power_draw_kw: 13.9, maintenance_status: 'Nominal' }
-    ]
-  },
-  {
-    id: 'ds-lead-attribution',
-    name: 'Hospitality Lead Attribution Matrix',
-    description: 'Multi-touch advertising attribution dataset across social, organic search, affiliate, and partner conferences.',
-    format: 'JSON',
-    rows: 68400,
-    columns: 5,
-    size: '14.2 MB',
-    updatedAt: '1 day ago',
-    healthScore: 92,
-    tags: ['Marketing', 'Attribution', 'CAC'],
-    schema: [
-      { name: 'lead_id', type: 'VARCHAR', nullable: false, uniqueCount: 68400 },
-      { name: 'first_touch_source', type: 'VARCHAR', nullable: false, uniqueCount: 6 },
-      { name: 'last_touch_source', type: 'VARCHAR', nullable: false, uniqueCount: 6 },
-      { name: 'days_to_close', type: 'INTEGER', nullable: false, uniqueCount: 45 },
-      { name: 'deal_size', type: 'DECIMAL', nullable: false, uniqueCount: 350 }
-    ],
-    sampleData: [
-      { lead_id: 'LEAD-441', first_touch_source: 'Organic Search', last_touch_source: 'Partner Webinar', days_to_close: 18, deal_size: 16500 },
-      { lead_id: 'LEAD-442', first_touch_source: 'Paid Social', last_touch_source: 'Direct Demo', days_to_close: 32, deal_size: 8900 },
-      { lead_id: 'LEAD-443', first_touch_source: 'Event Booth', last_touch_source: 'Sales Outbound', days_to_close: 14, deal_size: 24000 }
-    ]
   }
 ];
 
-export const INITIAL_ANALYSES: Analysis[] = [
+export const SAMPLE_ANALYSES: Analysis[] = [
   {
-    id: 'ana-1',
+    id: 'ana-demo-1',
     title: 'Starter Tier Churn Risk Spike at Day 45',
     datasetName: 'SaaS Customer Cohorts 2026',
-    datasetId: 'ds-saas-cohorts',
+    datasetId: 'ds-demo-saas',
     summary: 'Automated clustering revealed accounts with fewer than 10 weekly logins in their first month exhibit a 4.2x higher churn probability before their second billing cycle.',
     confidence: 98.4,
     category: 'Anomaly',
@@ -151,13 +110,14 @@ export const INITIAL_ANALYSES: Analysis[] = [
     keyMetric: 'Churn Delta',
     metricChange: '+23.4%',
     isPositive: false,
-    actionableRecommendation: 'Trigger automated in-app onboarding intervention when weekly logins fall under 12 in the first 21 days.'
+    actionableRecommendation: 'Trigger automated in-app onboarding intervention when weekly logins fall under 12 in the first 21 days.',
+    isDemo: true
   },
   {
-    id: 'ana-2',
+    id: 'ana-demo-2',
     title: 'Mobile Channel Average Order Value Expansion',
     datasetName: 'E-Commerce Global Orders Q3',
-    datasetId: 'ds-ecommerce-orders',
+    datasetId: 'ds-demo-ecommerce',
     summary: 'Cross-tabulation indicates mobile orders utilizing bundled checkout exceeded desktop basket sizes by $42.50 on average without increased return rates.',
     confidence: 96.1,
     category: 'Trend',
@@ -165,167 +125,105 @@ export const INITIAL_ANALYSES: Analysis[] = [
     keyMetric: 'Basket Expansion',
     metricChange: '+18.6%',
     isPositive: true,
-    actionableRecommendation: 'Deploy the 1-click bundle recommendations carousel to desktop checkout to capture parity.'
-  },
-  {
-    id: 'ana-3',
-    title: 'Cross-Border Latency Correlation with False Flags',
-    datasetName: 'Financial Fraud Risk Ledger',
-    datasetId: 'ds-fraud-ledger',
-    summary: 'Rule #14 flags 12% more legitimate transactions during peak transatlantic routing hours due to geo-distance heuristic miscalculations.',
-    confidence: 94.8,
-    category: 'Correlation',
-    createdAt: '3 hours ago',
-    keyMetric: 'False Positive Drop',
-    metricChange: '-9.2%',
-    isPositive: true,
-    actionableRecommendation: 'Incorporate IP velocity decay parameters into threshold calculations for European IP clusters.'
-  },
-  {
-    id: 'ana-4',
-    title: 'Motor Thermal Drift Preceding Bearing Failure',
-    datasetName: 'IoT Sensor Fleet Telemetry',
-    datasetId: 'ds-iot-fleet',
-    summary: 'Continuous Fourier transform analysis isolated a 72-hour thermal creep pattern of +4.2°C before vibration RMS exceeded safety tolerances.',
-    confidence: 99.1,
-    category: 'Forecast',
-    createdAt: '5 hours ago',
-    keyMetric: 'Uptime Gain',
-    metricChange: '+310 hrs',
-    isPositive: true,
-    actionableRecommendation: 'Set preemptive diagnostic alerts when temperature delta exceeds 3.5°C over 48 baseline operating hours.'
+    actionableRecommendation: 'Deploy the 1-click bundle recommendations carousel to desktop checkout to capture parity.',
+    isDemo: true
   }
 ];
 
-export const INITIAL_ACTIVITIES: ActivityItem[] = [
+export const SAMPLE_ACTIVITIES: ActivityItem[] = [
   {
-    id: 'act-1',
-    timestamp: '8 mins ago',
-    user: 'Elena Rostova',
-    avatar: 'ER',
+    id: 'act-demo-1',
+    timestamp: 'Sample event',
+    user: 'InsightIQ Demo Agent',
+    avatar: 'AI',
     action: 'Ran automated pipeline',
     target: 'Normalized currency codes in E-Commerce Global Orders Q3',
-    type: 'clean'
+    type: 'clean',
+    isDemo: true
   },
   {
-    id: 'act-2',
-    timestamp: '25 mins ago',
-    user: 'InsightIQ AI Agent',
+    id: 'act-demo-2',
+    timestamp: 'Sample event',
+    user: 'InsightIQ Demo Agent',
     avatar: 'AI',
     action: 'Generated insight brief',
     target: 'Identified Day-45 churn risk cluster in SaaS Cohorts',
-    type: 'ai'
-  },
-  {
-    id: 'act-3',
-    timestamp: '1 hour ago',
-    user: 'Marcus Vance',
-    avatar: 'MV',
-    action: 'Executed SQL query',
-    target: 'SELECT customer_id, monthly_arr FROM ds_saas WHERE churn_risk > 0.70',
-    type: 'query'
-  },
-  {
-    id: 'act-4',
-    timestamp: '2 hours ago',
-    user: 'Priya Sharma',
-    avatar: 'PS',
-    action: 'Ingested dataset',
-    target: 'Connected Snowflake table: Financial Fraud Risk Ledger (840k rows)',
-    type: 'upload'
-  },
-  {
-    id: 'act-5',
-    timestamp: '4 hours ago',
-    user: 'Elena Rostova',
-    avatar: 'ER',
-    action: 'Exported report package',
-    target: 'Q3 Executive Data Quality Audit exported to PDF & CSV',
-    type: 'export'
+    type: 'ai',
+    isDemo: true
   }
 ];
 
-export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
+export const SAMPLE_NOTIFICATIONS: NotificationItem[] = [
   {
-    id: 'notif-1',
-    title: 'Data Ingestion Complete',
-    message: 'IoT Sensor Fleet Telemetry (2.54M rows) was successfully indexed with zero schema drift.',
-    timestamp: '15m ago',
+    id: 'notif-demo-1',
+    title: 'Demo Environment Ready',
+    message: 'Sample datasets loaded in Demo Mode. Switch to Production Mode anytime to manage real datasets.',
+    timestamp: 'Just now',
     read: false,
     type: 'system',
-    linkTo: 'datasets'
-  },
-  {
-    id: 'notif-2',
-    title: 'Critical Churn Pattern Detected',
-    message: 'AI Analyst identified a 23.4% churn spike correlation among starter accounts with low login frequency.',
-    timestamp: '45m ago',
-    read: false,
-    type: 'insight',
-    linkTo: 'ai-analyst'
-  },
-  {
-    id: 'notif-3',
-    title: 'Anomaly Alert: Transaction Threshold',
-    message: 'Financial Fraud Risk Ledger recorded 14 cross-border alerts requiring parameter calibration.',
-    timestamp: '2h ago',
-    read: false,
-    type: 'alert',
-    linkTo: 'explore'
-  },
-  {
-    id: 'notif-4',
-    title: 'Predictive Model Retrained',
-    message: 'Customer Churn Predictor reached 92.4% ROC-AUC on refreshed training partitions.',
-    timestamp: '5h ago',
-    read: true,
-    type: 'system',
-    linkTo: 'predictive-lab'
+    linkTo: 'datasets',
+    isDemo: true
   }
 ];
 
-export const PREDICTIVE_MODELS: PredictiveModel[] = [
+export const SAMPLE_MODELS: PredictiveModel[] = [
   {
-    id: 'model-churn',
-    name: 'Customer Churn Predictor (Random Forest)',
+    id: 'model-demo-churn',
+    name: 'Customer Churn Predictor (Demo Model)',
     algorithm: 'Ensemble Random Forest (500 Estimators)',
     targetMetric: 'churn_risk_score >= 0.65',
     accuracy: 94.2,
     rocAuc: 0.924,
     f1Score: 0.892,
+    datasetId: 'ds-demo-saas',
+    datasetName: 'SaaS Customer Cohorts 2026',
     features: [
-      { name: 'login_frequency_weekly', importance: 0.38 },
-      { name: 'support_tickets_30d', importance: 0.27 },
-      { name: 'active_seats', importance: 0.16 },
-      { name: 'monthly_arr', importance: 0.12 },
-      { name: 'region', importance: 0.07 }
+      { name: 'login_frequency_weekly', importance: 0.38, defaultVal: 18, min: 2, max: 40 },
+      { name: 'support_tickets_30d', importance: 0.27, defaultVal: 2, min: 0, max: 15 },
+      { name: 'active_seats', importance: 0.16, defaultVal: 45, min: 5, max: 350 },
+      { name: 'monthly_arr', importance: 0.12, defaultVal: 6500, min: 500, max: 25000 }
     ],
     confusionMatrix: {
       truePositive: 1420,
       falsePositive: 94,
       trueNegative: 12150,
       falseNegative: 140
-    }
-  },
-  {
-    id: 'model-revenue',
-    name: 'Q4 Revenue Velocity Forecaster (XGBoost)',
-    algorithm: 'Gradient Boosted Trees with Time Decay',
-    targetMetric: 'gross_value_next_30d',
-    accuracy: 91.8,
-    rocAuc: 0.895,
-    f1Score: 0.871,
-    features: [
-      { name: 'basket_expansion_rate', importance: 0.41 },
-      { name: 'repeat_purchase_velocity', importance: 0.29 },
-      { name: 'channel_affinity', importance: 0.18 },
-      { name: 'discount_sensitivity', importance: 0.12 }
-    ],
-    confusionMatrix: {
-      truePositive: 980,
-      falsePositive: 110,
-      trueNegative: 8940,
-      falseNegative: 120
-    }
+    },
+    isDemo: true
   }
 ];
+
+export const SAMPLE_REPORTS: ReportItem[] = [
+  {
+    id: 'rep-demo-1',
+    title: 'Executive Intelligence Brief (Sample Report)',
+    subtitle: 'Demonstration brief showing cross-pipeline metrics and cohort retention synthesis',
+    cadence: 'On Demand (Demo Mode)',
+    status: 'Sample Document',
+    author: 'InsightIQ Demo Engine',
+    createdAt: 'Today',
+    datasetName: 'SaaS Customer Cohorts 2026',
+    metrics: [
+      { label: 'Sample Volume', value: '142,850 rows', delta: '+12.4%' },
+      { label: 'Demonstration ARR', value: '$1.48M', delta: '+18.6%' },
+      { label: 'Dataset Hygiene', value: '98.0%', delta: 'Optimal' },
+      { label: 'High Risk Flags', value: '14 accounts', delta: '-6 MoM' }
+    ],
+    findings: [
+      'Account retention correlates strongly with first-month weekly login frequency.',
+      'Mobile channel basket sizes exceeded desktop by 18.6% with consistent return rates.'
+    ],
+    recommendations: [
+      'Trigger proactive outreach when an account login velocity drops below 12 sessions/week.',
+      'Deploy the multi-currency cleaning recipe across new ingestion streams.'
+    ],
+    isDemo: true
+  }
+];
+
+// Clean Production starting state (Empty by default)
+export const INITIAL_DATASETS: Dataset[] = [];
+export const INITIAL_ANALYSES: Analysis[] = [];
+export const INITIAL_ACTIVITIES: ActivityItem[] = [];
+export const INITIAL_NOTIFICATIONS: NotificationItem[] = [];
+export const PREDICTIVE_MODELS: PredictiveModel[] = [];

@@ -17,12 +17,28 @@ import {
 import { NavigationId } from '../types';
 
 interface SettingsViewProps {
+  isDemoMode: boolean;
+  datasetCount: number;
+  analysisCount: number;
+  modelCount: number;
+  reportCount: number;
   onResetDemoData: () => void;
+  onLoadDemoMode?: () => void;
+  onExitDemoMode?: () => void;
+  onClearProductionData?: () => void;
   onNotify: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
+  isDemoMode,
+  datasetCount,
+  analysisCount,
+  modelCount,
+  reportCount,
   onResetDemoData,
+  onLoadDemoMode,
+  onExitDemoMode,
+  onClearProductionData,
   onNotify
 }) => {
   const [workspaceName, setWorkspaceName] = useState('Acme Enterprise Intelligence');
@@ -195,38 +211,112 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         {/* Right Column (5 cols): Demo Data Control & System State */}
         <div className="lg:col-span-5 space-y-6">
-          {/* Demonstration Environment Control */}
+          {/* Environment & Data Mode Manager */}
           <div className="bg-[#0D1424] border border-cyan-900/60 rounded-xl p-5 space-y-4 shadow-sm">
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-              <Database className="w-4 h-4 text-cyan-400" />
-              <h2 className="text-sm font-semibold text-slate-100">Demonstration Data Engine</h2>
-            </div>
-
-            <div className="p-3 bg-cyan-950/20 border border-cyan-800/40 rounded-lg text-xs text-slate-300 space-y-2">
-              <div className="flex items-center gap-1.5 font-semibold text-cyan-300">
-                <ShieldCheck className="w-4 h-4 text-cyan-400" />
-                <span>Clear Demonstration Labeling</span>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-cyan-400" />
+                <h2 className="text-sm font-semibold text-slate-100">Environment & Data Mode</h2>
               </div>
-              <p className="leading-relaxed">
-                All records, analyses, and ML telemetry loaded in InsightIQ are synthetic demonstration assets designed to illustrate enterprise B2B workflows.
+              <span className={`px-2 py-0.5 text-[10px] font-mono rounded ${
+                isDemoMode ? 'bg-amber-950/70 text-amber-300 border border-amber-800/80' : 'bg-emerald-950/70 text-emerald-300 border border-emerald-800/80'
+              }`}>
+                {isDemoMode ? 'Demo Mode' : 'Clean Production'}
+              </span>
+            </div>
+
+            <div className={`p-3 rounded-lg text-xs space-y-2 border ${
+              isDemoMode 
+                ? 'bg-amber-950/20 border-amber-800/40 text-amber-200/90' 
+                : 'bg-emerald-950/20 border-emerald-800/40 text-emerald-200/90'
+            }`}>
+              <div className="flex items-center gap-1.5 font-semibold">
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                <span>{isDemoMode ? 'Demonstration Dataset Fixtures Active' : 'Clean Production Mode Enforced'}</span>
+              </div>
+              <p className="leading-relaxed text-[11px] text-slate-300">
+                {isDemoMode 
+                  ? 'Showing 5 synthetic enterprise datasets, sample analyses, and simulated predictive models. Your real uploads remain safely isolated.' 
+                  : 'Zero fabricated records. All dashboard KPIs, queries, and reports reflect strictly your uploaded files and actual in-memory queries.'}
               </p>
             </div>
 
-            <div className="space-y-3 pt-1">
-              <p className="text-xs text-slate-400">
-                Need to reset uploaded tables, revert cleaning recipes, and restore all default dataset fixtures?
-              </p>
+            {/* Current Storage Metrics */}
+            <div className="grid grid-cols-2 gap-2 p-2.5 bg-[#090E1A] rounded-lg border border-slate-800/80 text-xs">
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Datasets</span>
+                <span className="font-mono font-semibold text-cyan-300">{datasetCount}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">AI Analyses</span>
+                <span className="font-mono font-semibold text-purple-300">{analysisCount}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">ML Models</span>
+                <span className="font-mono font-semibold text-indigo-300">{modelCount}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Saved Reports</span>
+                <span className="font-mono font-semibold text-emerald-300">{reportCount}</span>
+              </div>
+            </div>
 
-              <button
-                onClick={() => {
-                  onResetDemoData();
-                  onNotify('Demonstration State Reset', 'All datasets and pipeline recipes have been reinitialized.', 'success');
-                }}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-cyan-300 bg-slate-800 hover:bg-slate-700 border border-cyan-800/60 rounded-lg transition-colors cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Reset to Factory Demo State</span>
-              </button>
+            <div className="space-y-2.5 pt-1">
+              {isDemoMode ? (
+                <>
+                  {onExitDemoMode && (
+                    <button
+                      onClick={() => {
+                        onExitDemoMode();
+                        onNotify('Switched to Production', 'Returned to clean workspace with zero demo records.', 'info');
+                      }}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Exit Demo Mode (Return to Clean Production)</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      onResetDemoData();
+                      onNotify('Sample Data Reinitialized', 'Factory demonstration fixtures reloaded.', 'success');
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-1.5 text-xs font-medium text-amber-300 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/60 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Reset Sample Datasets</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  {onLoadDemoMode && (
+                    <button
+                      onClick={() => {
+                        onLoadDemoMode();
+                        onNotify('Demo Mode Enabled', 'Loaded 5 synthetic enterprise datasets for feature evaluation.', 'info');
+                      }}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-cyan-300 bg-slate-800 hover:bg-slate-700 border border-cyan-800/60 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Database className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Load Sample Datasets (Demo Mode)</span>
+                    </button>
+                  )}
+                  {onClearProductionData && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to clear all stored user datasets and reset your workspace?')) {
+                          onClearProductionData();
+                          onNotify('Workspace Reset', 'All user datasets, analyses, and history cleared.', 'info');
+                        }
+                      }}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-1.5 text-xs font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 border border-rose-900/40 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Clear All Stored User Data</span>
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
