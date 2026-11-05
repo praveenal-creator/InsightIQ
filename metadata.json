@@ -1,0 +1,6 @@
+{
+  "name": "InsightIQ - AI Data Intelligence Dashboard",
+  "description": "Enterprise dark navy SaaS platform for dataset exploration, predictive ML modeling, conversational AI analyst, interactive SQL playground, and data cleaning pipelines.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
