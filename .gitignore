@@ -6,3 +6,18 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Python environment and cache
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local backups
+*.backup
+*.bak
+
+# Historical backend backups
+*-backup
+*.pre-*

@@ -1,37 +1,34 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  NavigationId, 
-  Dataset, 
-  Analysis, 
-  ActivityItem, 
+import React, { useState, useEffect } from 'react';
+import type { User } from '@supabase/supabase-js';
+import { supabase } from './lib/supabase';
+import Auth from './components/auth/Auth';
+
+import {
+  NavigationId,
+  Dataset,
+  Analysis,
+  ActivityItem,
   NotificationItem,
   PredictiveModel,
   ReportItem,
   SqlQueryRecord
 } from './types';
-import { 
-  SAMPLE_DATASETS, 
-  SAMPLE_ANALYSES, 
-  SAMPLE_ACTIVITIES, 
-  SAMPLE_NOTIFICATIONS,
-  SAMPLE_MODELS,
-  SAMPLE_REPORTS
-} from './data/mockData';
 
 // Layout & Navigation Components
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
-import { DemoBanner } from './components/common/DemoBanner';
 import { CommandPalette } from './components/common/CommandPalette';
 import { UploadDatasetModal } from './components/common/UploadDatasetModal';
+import { listDatasetsFromApi, deleteDatasetApi } from './utils/datasetApi';
 import { ToastContainer, ToastMessage } from './components/common/Toast';
 
-// Views for all 10 Navigation Items
+// Views
 import { OverviewView } from './views/OverviewView';
 import { DatasetsView } from './views/DatasetsView';
 import { AiAnalystView } from './views/AiAnalystView';
@@ -44,7 +41,6 @@ import { ReportsView } from './views/ReportsView';
 import { SettingsView } from './views/SettingsView';
 
 const STORAGE_KEYS = {
-  DEMO_MODE: 'insightiq_demo_mode',
   DATASETS: 'insightiq_prod_datasets',
   ANALYSES: 'insightiq_prod_analyses',
   ACTIVITIES: 'insightiq_prod_activities',
@@ -54,9 +50,53 @@ const STORAGE_KEYS = {
 };
 
 export default function App() {
-  // Hash Routing Logic
+  // ==========================================
+  // SUPABASE AUTHENTICATION
+  // ==========================================
+
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      if (error) {
+        console.error('Session error:', error);
+      }
+
+      setUser(data.session?.user ?? null);
+      setAuthLoading(false);
+    };
+
+    loadSession();
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) {
+        setUser(session?.user ?? null);
+        setAuthLoading(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // ==========================================
+  // HASH ROUTING
+  // ==========================================
+
   const getInitialView = (): NavigationId => {
     const hash = window.location.hash.replace('#/', '').replace('#', '');
+
     const validViews: NavigationId[] = [
       'overview',
       'datasets',
@@ -69,148 +109,126 @@ export default function App() {
       'reports',
       'settings'
     ];
-    return validViews.includes(hash as NavigationId) ? (hash as NavigationId) : 'overview';
+
+    return validViews.includes(hash as NavigationId)
+      ? (hash as NavigationId)
+      : 'overview';
   };
 
   const [currentView, setCurrentView] = useState<NavigationId>(getInitialView);
 
-  // Demo Mode toggle state (defaults to false for clean production)
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEYS.DEMO_MODE) === 'true';
-    } catch {
-      return false;
-    }
-  });
+  // ==========================================
+  // USER DATA
+  // ==========================================
 
-  // Production User Datasets (Persistent in LocalStorage)
-  const [productionDatasets, setProductionDatasets] = useState<Dataset[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.DATASETS);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // Production User Analyses
-  const [productionAnalyses, setProductionAnalyses] = useState<Analysis[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.ANALYSES);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // Production User Activities
-  const [productionActivities, setProductionActivities] = useState<ActivityItem[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.ACTIVITIES);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // Production User ML Models
-  const [productionModels, setProductionModels] = useState<PredictiveModel[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.MODELS);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // Production User Reports
-  const [productionReports, setProductionReports] = useState<ReportItem[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.REPORTS);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // SQL Query Execution History
-  const [queryHistory, setQueryHistory] = useState<SqlQueryRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.QUERY_HISTORY);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // In-memory demo datasets copy for when demo mode is active and user edits them
-  const [activeDemoDatasets, setActiveDemoDatasets] = useState<Dataset[]>(SAMPLE_DATASETS);
-  const [activeDemoAnalyses, setActiveDemoAnalyses] = useState<Analysis[]>(SAMPLE_ANALYSES);
-  const [activeDemoActivities, setActiveDemoActivities] = useState<ActivityItem[]>(SAMPLE_ACTIVITIES);
-  const [activeDemoModels, setActiveDemoModels] = useState<PredictiveModel[]>(SAMPLE_MODELS);
-  const [activeDemoReports, setActiveDemoReports] = useState<ReportItem[]>(SAMPLE_REPORTS);
-
+  const [productionDatasets, setProductionDatasets] = useState<Dataset[]>([]);
+  const [productionAnalyses, setProductionAnalyses] = useState<Analysis[]>([]);
+  const [productionActivities, setProductionActivities] = useState<ActivityItem[]>([]);
+  const [productionModels, setProductionModels] = useState<PredictiveModel[]>([]);
+  const [productionReports, setProductionReports] = useState<ReportItem[]>([]);
+  const [queryHistory, setQueryHistory] = useState<SqlQueryRecord[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
-  // Effective state combining production + demo data if demo mode is enabled
-  const datasets = useMemo(() => {
-    if (isDemoMode) {
-      return [...productionDatasets, ...activeDemoDatasets];
-    }
-    return productionDatasets;
-  }, [isDemoMode, productionDatasets, activeDemoDatasets]);
+  // Load user data after authentication.
+  // Datasets are fetched from the authenticated cloud API.
+  useEffect(() => {
+    let cancelled = false;
 
-  const analyses = useMemo(() => {
-    if (isDemoMode) {
-      return [...productionAnalyses, ...activeDemoAnalyses];
+    if (!user) {
+      setProductionDatasets([]);
+      setProductionAnalyses([]);
+      setProductionActivities([]);
+      setProductionModels([]);
+      setProductionReports([]);
+      setQueryHistory([]);
+      setNotifications([]);
+      return () => {
+        cancelled = true;
+      };
     }
-    return productionAnalyses;
-  }, [isDemoMode, productionAnalyses, activeDemoAnalyses]);
 
-  const activities = useMemo(() => {
-    if (isDemoMode) {
-      return [...productionActivities, ...activeDemoActivities];
-    }
-    return productionActivities;
-  }, [isDemoMode, productionActivities, activeDemoActivities]);
+    const loadStoredData = <T,>(key: string): T[] => {
+      try {
+        const stored = localStorage.getItem(`${key}_${user.id}`);
+        return stored ? JSON.parse(stored) : [];
+      } catch {
+        return [];
+      }
+    };
 
-  const models = useMemo(() => {
-    if (isDemoMode) {
-      return [...productionModels, ...activeDemoModels];
-    }
-    return productionModels;
-  }, [isDemoMode, productionModels, activeDemoModels]);
+    setProductionDatasets([]);
+    setProductionAnalyses(loadStoredData<Analysis>(STORAGE_KEYS.ANALYSES));
+    setProductionActivities(loadStoredData<ActivityItem>(STORAGE_KEYS.ACTIVITIES));
+    setProductionModels(loadStoredData<PredictiveModel>(STORAGE_KEYS.MODELS));
+    setProductionReports(loadStoredData<ReportItem>(STORAGE_KEYS.REPORTS));
+    setQueryHistory(loadStoredData<SqlQueryRecord>(STORAGE_KEYS.QUERY_HISTORY));
+    setNotifications([]);
 
-  const reports = useMemo(() => {
-    if (isDemoMode) {
-      return [...productionReports, ...activeDemoReports];
-    }
-    return productionReports;
-  }, [isDemoMode, productionReports, activeDemoReports]);
+    const loadCloudDatasets = async () => {
+      try {
+        const cloudDatasets = await listDatasetsFromApi();
+        if (!cancelled) {
+          setProductionDatasets(cloudDatasets);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Could not load cloud datasets:', error);
+        }
+      }
+    };
 
-  // Selected dataset for exploration / cleaning / visualizations
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
+    loadCloudDatasets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // ==========================================
+  // DATA ALIASES
+  // ==========================================
+
+  const datasets = productionDatasets;
+  const analyses = productionAnalyses;
+  const activities = productionActivities;
+  const models = productionModels;
+  const reports = productionReports;
+
+  // ==========================================
+  // SELECTED DATASET
+  // ==========================================
+
+  const [selectedDatasetId, setSelectedDatasetId] = useState('');
 
   useEffect(() => {
     if (datasets.length > 0 && !datasets.some(d => d.id === selectedDatasetId)) {
       setSelectedDatasetId(datasets[0].id);
     }
+
+    if (datasets.length === 0) {
+      setSelectedDatasetId('');
+    }
   }, [datasets, selectedDatasetId]);
 
-  // Cross-view bridge: from AI Analyst to SQL Playground
-  const [injectedSqlQuery, setInjectedSqlQuery] = useState<string | undefined>(undefined);
+  // ==========================================
+  // UI STATES
+  // ==========================================
 
-  // Layout UI states
+  const [injectedSqlQuery, setInjectedSqlQuery] = useState<string | undefined>();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // Sync hash routing
+  // ==========================================
+  // HASH ROUTING SYNC
+  // ==========================================
+
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#/', '').replace('#', '');
+
       const validViews: NavigationId[] = [
         'overview',
         'datasets',
@@ -223,12 +241,14 @@ export default function App() {
         'reports',
         'settings'
       ];
+
       if (validViews.includes(hash as NavigationId)) {
         setCurrentView(hash as NavigationId);
       }
     };
 
     window.addEventListener('hashchange', handleHashChange);
+
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
@@ -238,7 +258,10 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Keyboard shortcut listener for Command Palette (⌘K or Ctrl+K)
+  // ==========================================
+  // COMMAND PALETTE SHORTCUT
+  // ==========================================
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -246,15 +269,49 @@ export default function App() {
         setIsCommandPaletteOpen(prev => !prev);
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
+
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Toast Helpers
-  const addToast = (title: string, description?: string, type: 'success' | 'info' | 'error' = 'info') => {
+  // ==========================================
+  // STORAGE HELPER
+  // ==========================================
+
+  const saveData = (key: string, value: unknown) => {
+    if (!user) return;
+
+    try {
+      localStorage.setItem(
+        `${key}_${user.id}`,
+        JSON.stringify(value)
+      );
+    } catch (error) {
+      console.error('Could not save data:', error);
+    }
+  };
+
+  // ==========================================
+  // TOAST HELPERS
+  // ==========================================
+
+  const addToast = (
+    title: string,
+    description?: string,
+    type: 'success' | 'info' | 'error' = 'info'
+  ) => {
     const id = `toast-${Date.now()}`;
-    const newToast: ToastMessage = { id, title, description, type };
+
+    const newToast: ToastMessage = {
+      id,
+      title,
+      description,
+      type
+    };
+
     setToasts(prev => [...prev, newToast]);
+
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4000);
@@ -264,9 +321,14 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  // Notification handlers
+  // ==========================================
+  // NOTIFICATIONS
+  // ==========================================
+
   const handleMarkNotificationAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    setNotifications(prev =>
+      prev.map(n => n.id === id ? { ...n, read: true } : n)
+    );
   };
 
   const handleMarkAllNotificationsAsRead = () => {
@@ -274,36 +336,9 @@ export default function App() {
     addToast('All Caught Up', 'Marked all notifications as read.', 'info');
   };
 
-  // Demo Mode Switchers
-  const handleLoadDemoMode = () => {
-    setIsDemoMode(true);
-    setActiveDemoDatasets(SAMPLE_DATASETS);
-    setActiveDemoAnalyses(SAMPLE_ANALYSES);
-    setActiveDemoActivities(SAMPLE_ACTIVITIES);
-    setActiveDemoModels(SAMPLE_MODELS);
-    setActiveDemoReports(SAMPLE_REPORTS);
-    try {
-      localStorage.setItem(STORAGE_KEYS.DEMO_MODE, 'true');
-    } catch {}
-    addToast('Demo Mode Enabled', 'Loaded 5 sample enterprise datasets and simulation models.', 'info');
-  };
-
-  const handleExitDemoMode = () => {
-    setIsDemoMode(false);
-    try {
-      localStorage.setItem(STORAGE_KEYS.DEMO_MODE, 'false');
-    } catch {}
-    addToast('Clean Production Active', 'Switched to clean workspace showing only real user data.', 'success');
-  };
-
-  const handleResetDemoData = () => {
-    setActiveDemoDatasets(SAMPLE_DATASETS);
-    setActiveDemoAnalyses(SAMPLE_ANALYSES);
-    setActiveDemoActivities(SAMPLE_ACTIVITIES);
-    setActiveDemoModels(SAMPLE_MODELS);
-    setActiveDemoReports(SAMPLE_REPORTS);
-    addToast('Demo State Reinitialized', 'Restored 5 synthetic datasets, metrics, and default queries.', 'success');
-  };
+  // ==========================================
+  // CLEAR WORKSPACE
+  // ==========================================
 
   const handleClearProductionData = () => {
     setProductionDatasets([]);
@@ -312,28 +347,36 @@ export default function App() {
     setProductionModels([]);
     setProductionReports([]);
     setQueryHistory([]);
-    try {
-      localStorage.removeItem(STORAGE_KEYS.DATASETS);
-      localStorage.removeItem(STORAGE_KEYS.ANALYSES);
-      localStorage.removeItem(STORAGE_KEYS.ACTIVITIES);
-      localStorage.removeItem(STORAGE_KEYS.MODELS);
-      localStorage.removeItem(STORAGE_KEYS.REPORTS);
-      localStorage.removeItem(STORAGE_KEYS.QUERY_HISTORY);
-    } catch {}
-    addToast('Workspace Reset', 'All user datasets, analyses, and history have been cleared.', 'info');
+    setNotifications([]);
+
+    if (user) {
+      Object.values(STORAGE_KEYS).forEach(key => {
+        try {
+          localStorage.removeItem(`${key}_${user.id}`);
+        } catch {}
+      });
+    }
+
+    setSelectedDatasetId('');
+
+    addToast(
+      'Workspace Reset',
+      'Your browser workspace data has been cleared.',
+      'info'
+    );
   };
 
-  // Ingest new dataset (always saves as real user dataset)
+  // ==========================================
+  // ADD DATASET
+  // ==========================================
+
   const handleAddDataset = (newDataset: Dataset) => {
     const updated = [newDataset, ...productionDatasets];
+
     setProductionDatasets(updated);
-    try {
-      localStorage.setItem(STORAGE_KEYS.DATASETS, JSON.stringify(updated));
-    } catch {}
 
     setSelectedDatasetId(newDataset.id);
-    
-    // Log user activity
+
     const newActivity: ActivityItem = {
       id: `act-${Date.now()}`,
       timestamp: 'Just now',
@@ -343,58 +386,72 @@ export default function App() {
       target: `${newDataset.name} (${newDataset.rows.toLocaleString()} rows, ${newDataset.format})`,
       type: 'upload'
     };
-    const updatedActivities = [newActivity, ...productionActivities];
-    setProductionActivities(updatedActivities);
-    try {
-      localStorage.setItem(STORAGE_KEYS.ACTIVITIES, JSON.stringify(updatedActivities));
-    } catch {}
 
-    // Push notification
+    const updatedActivities = [newActivity, ...productionActivities];
+
+    setProductionActivities(updatedActivities);
+    saveData(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+
     const newNotification: NotificationItem = {
       id: `notif-${Date.now()}`,
       title: 'Dataset Ingestion Succeeded',
-      message: `${newDataset.name} was indexed with 0 schema violations.`,
+      message: `${newDataset.name} was indexed.`,
       timestamp: 'Just now',
       read: false,
       type: 'system',
       linkTo: 'explore'
     };
+
     setNotifications(prev => [newNotification, ...prev]);
 
-    addToast('Dataset Connected', `${newDataset.name} has been indexed.`, 'success');
+    addToast(
+      'Dataset Connected',
+      `${newDataset.name} has been indexed.`,
+      'success'
+    );
   };
 
-  // Delete dataset
-  const handleDeleteDataset = (id: string) => {
-    const ds = datasets.find(d => d.id === id);
-    if (ds?.isDemo) {
-      setActiveDemoDatasets(prev => prev.filter(d => d.id !== id));
-    } else {
+  // ==========================================
+  // DELETE DATASET
+  // ==========================================
+
+  const handleDeleteDataset = async (id: string) => {
+    const ds = productionDatasets.find(d => d.id === id);
+
+    try {
+      await deleteDatasetApi(id);
+
       const updated = productionDatasets.filter(d => d.id !== id);
       setProductionDatasets(updated);
-      try {
-        localStorage.setItem(STORAGE_KEYS.DATASETS, JSON.stringify(updated));
-      } catch {}
-    }
 
-    if (selectedDatasetId === id) {
-      const remaining = datasets.filter(d => d.id !== id);
-      if (remaining.length > 0) {
-        setSelectedDatasetId(remaining[0].id);
-      } else {
-        setSelectedDatasetId('');
+      if (selectedDatasetId === id) {
+        setSelectedDatasetId(updated.length > 0 ? updated[0].id : '');
       }
+
+      addToast(
+        'Dataset Removed',
+        `${ds?.name || 'Dataset'} was permanently removed from cloud storage.`,
+        'success'
+      );
+    } catch (error) {
+      console.error('Could not delete cloud dataset:', error);
+      addToast(
+        'Delete Failed',
+        error instanceof Error ? error.message : 'Could not delete dataset from cloud storage.',
+        'error'
+      );
     }
-    addToast('Dataset Removed', `${ds?.name || 'Dataset'} was detached from the data lake.`, 'info');
   };
 
-  // Save AI Analysis
+  // ==========================================
+  // SAVE AI ANALYSIS
+  // ==========================================
+
   const handleSaveAnalysis = (newAnalysis: Analysis) => {
     const updated = [newAnalysis, ...productionAnalyses];
+
     setProductionAnalyses(updated);
-    try {
-      localStorage.setItem(STORAGE_KEYS.ANALYSES, JSON.stringify(updated));
-    } catch {}
+    saveData(STORAGE_KEYS.ANALYSES, updated);
 
     const newActivity: ActivityItem = {
       id: `act-ai-${Date.now()}`,
@@ -405,20 +462,22 @@ export default function App() {
       target: newAnalysis.title,
       type: 'ai'
     };
+
     const updatedActivities = [newActivity, ...productionActivities];
+
     setProductionActivities(updatedActivities);
-    try {
-      localStorage.setItem(STORAGE_KEYS.ACTIVITIES, JSON.stringify(updatedActivities));
-    } catch {}
+    saveData(STORAGE_KEYS.ACTIVITIES, updatedActivities);
   };
 
-  // Save ML Model
+  // ==========================================
+  // SAVE ML MODEL
+  // ==========================================
+
   const handleSaveModel = (newModel: PredictiveModel) => {
     const updated = [newModel, ...productionModels];
+
     setProductionModels(updated);
-    try {
-      localStorage.setItem(STORAGE_KEYS.MODELS, JSON.stringify(updated));
-    } catch {}
+    saveData(STORAGE_KEYS.MODELS, updated);
 
     const newActivity: ActivityItem = {
       id: `act-ml-${Date.now()}`,
@@ -429,20 +488,22 @@ export default function App() {
       target: newModel.name,
       type: 'ai'
     };
+
     const updatedActivities = [newActivity, ...productionActivities];
+
     setProductionActivities(updatedActivities);
-    try {
-      localStorage.setItem(STORAGE_KEYS.ACTIVITIES, JSON.stringify(updatedActivities));
-    } catch {}
+    saveData(STORAGE_KEYS.ACTIVITIES, updatedActivities);
   };
 
-  // Generate Report
+  // ==========================================
+  // GENERATE REPORT
+  // ==========================================
+
   const handleGenerateReport = (newReport: ReportItem) => {
     const updated = [newReport, ...productionReports];
+
     setProductionReports(updated);
-    try {
-      localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(updated));
-    } catch {}
+    saveData(STORAGE_KEYS.REPORTS, updated);
 
     const newActivity: ActivityItem = {
       id: `act-rep-${Date.now()}`,
@@ -453,20 +514,22 @@ export default function App() {
       target: newReport.title,
       type: 'clean'
     };
+
     const updatedActivities = [newActivity, ...productionActivities];
+
     setProductionActivities(updatedActivities);
-    try {
-      localStorage.setItem(STORAGE_KEYS.ACTIVITIES, JSON.stringify(updatedActivities));
-    } catch {}
+    saveData(STORAGE_KEYS.ACTIVITIES, updatedActivities);
   };
 
-  // Log SQL Query
+  // ==========================================
+  // LOG SQL QUERY
+  // ==========================================
+
   const handleLogQuery = (record: SqlQueryRecord) => {
     const updated = [record, ...queryHistory.slice(0, 49)];
+
     setQueryHistory(updated);
-    try {
-      localStorage.setItem(STORAGE_KEYS.QUERY_HISTORY, JSON.stringify(updated));
-    } catch {}
+    saveData(STORAGE_KEYS.QUERY_HISTORY, updated);
 
     const newActivity: ActivityItem = {
       id: `act-sql-${Date.now()}`,
@@ -477,35 +540,35 @@ export default function App() {
       target: `${record.rowCount} rows returned (${record.durationMs}ms)`,
       type: 'query'
     };
+
     const updatedActivities = [newActivity, ...productionActivities];
+
     setProductionActivities(updatedActivities);
-    try {
-      localStorage.setItem(STORAGE_KEYS.ACTIVITIES, JSON.stringify(updatedActivities));
-    } catch {}
+    saveData(STORAGE_KEYS.ACTIVITIES, updatedActivities);
   };
 
-  // Update Dataset rows (from Data Cleaning Studio)
-  const handleUpdateDatasetData = (datasetId: string, updatedRows: Record<string, any>[]) => {
-    const isTargetDemo = activeDemoDatasets.some(d => d.id === datasetId);
-    if (isTargetDemo) {
-      setActiveDemoDatasets(prev => prev.map(d => {
-        if (d.id === datasetId) {
-          return { ...d, sampleData: updatedRows, rows: updatedRows.length };
-        }
-        return d;
-      }));
-    } else {
-      const updated = productionDatasets.map(d => {
-        if (d.id === datasetId) {
-          return { ...d, sampleData: updatedRows, rows: updatedRows.length };
-        }
-        return d;
-      });
-      setProductionDatasets(updated);
-      try {
-        localStorage.setItem(STORAGE_KEYS.DATASETS, JSON.stringify(updated));
-      } catch {}
-    }
+  // ==========================================
+  // UPDATE DATASET
+  // ==========================================
+
+  const handleUpdateDatasetData = (
+    datasetId: string,
+    updatedRows: Record<string, any>[]
+  ) => {
+    const updated = productionDatasets.map(d => {
+      if (d.id === datasetId) {
+        return {
+          ...d,
+          sampleData: updatedRows,
+          rows: updatedRows.length
+        };
+      }
+
+      return d;
+    });
+
+    setProductionDatasets(updated);
+
 
     const newActivity: ActivityItem = {
       id: `act-clean-${Date.now()}`,
@@ -516,33 +579,56 @@ export default function App() {
       target: `${updatedRows.length} cleaned rows committed`,
       type: 'clean'
     };
+
     const updatedActivities = [newActivity, ...productionActivities];
+
     setProductionActivities(updatedActivities);
-    try {
-      localStorage.setItem(STORAGE_KEYS.ACTIVITIES, JSON.stringify(updatedActivities));
-    } catch {}
+    saveData(STORAGE_KEYS.ACTIVITIES, updatedActivities);
   };
 
-  // Cross-view bridge: from AI Analyst to SQL Playground
+  // ==========================================
+  // AI ANALYST TO SQL PLAYGROUND
+  // ==========================================
+
   const handleRunQueryInPlayground = (sql: string) => {
     setInjectedSqlQuery(sql);
     handleNavigate('sql-playground');
-    addToast('Query Injected into SQL Playground', 'Ready for live execution evaluation.', 'info');
+
+    addToast(
+      'Query Injected into SQL Playground',
+      'Ready for execution.',
+      'info'
+    );
   };
+
+  // ==========================================
+  // AUTHENTICATION LOADING
+  // ==========================================
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#070B14] flex items-center justify-center text-cyan-400">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-slate-400">Loading InsightIQ...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Auth />;
+  }
+
+  // ==========================================
+  // AUTHENTICATED DASHBOARD
+  // ==========================================
 
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 flex flex-col font-sans">
-      {/* Clear Demonstration Data Notification Bar */}
-      <DemoBanner 
-        isDemoMode={isDemoMode}
-        onResetDemoData={handleResetDemoData}
-        onExitDemoMode={handleExitDemoMode}
-        onLoadDemoMode={handleLoadDemoMode}
-      />
 
-      {/* Main App Layout */}
       <div className="flex flex-1 min-h-0 relative">
-        {/* Responsive Collapsible Sidebar */}
+
         <Sidebar
           currentView={currentView}
           onNavigate={handleNavigate}
@@ -553,9 +639,8 @@ export default function App() {
           datasetCount={datasets.length}
         />
 
-        {/* Content Viewport */}
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-          {/* Header */}
+
           <Header
             currentView={currentView}
             onNavigate={handleNavigate}
@@ -566,8 +651,8 @@ export default function App() {
             onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
           />
 
-          {/* View Container */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+
             {currentView === 'overview' && (
               <OverviewView
                 onNavigate={handleNavigate}
@@ -575,15 +660,12 @@ export default function App() {
                 analyses={analyses}
                 activities={activities}
                 queryHistoryCount={queryHistory.length}
-                isDemoMode={isDemoMode}
                 onOpenUploadModal={() => setIsUploadModalOpen(true)}
                 onSelectDatasetForExplore={(id) => {
                   setSelectedDatasetId(id);
                   handleNavigate('explore');
                 }}
                 onNotify={addToast}
-                onLoadDemoMode={handleLoadDemoMode}
-                onExitDemoMode={handleExitDemoMode}
               />
             )}
 
@@ -597,8 +679,6 @@ export default function App() {
                   handleNavigate('explore');
                 }}
                 onDeleteDataset={handleDeleteDataset}
-                onLoadDemoMode={handleLoadDemoMode}
-                isDemoMode={isDemoMode}
               />
             )}
 
@@ -610,7 +690,6 @@ export default function App() {
                 onNotify={addToast}
                 onSaveAnalysis={handleSaveAnalysis}
                 onOpenUploadModal={() => setIsUploadModalOpen(true)}
-                onLoadDemoMode={handleLoadDemoMode}
               />
             )}
 
@@ -622,7 +701,6 @@ export default function App() {
                 onNavigate={handleNavigate}
                 onNotify={addToast}
                 onOpenUploadModal={() => setIsUploadModalOpen(true)}
-                onLoadDemoMode={handleLoadDemoMode}
               />
             )}
 
@@ -635,7 +713,6 @@ export default function App() {
                 onNotify={addToast}
                 onUpdateDatasetData={handleUpdateDatasetData}
                 onOpenUploadModal={() => setIsUploadModalOpen(true)}
-                onLoadDemoMode={handleLoadDemoMode}
               />
             )}
 
@@ -647,7 +724,6 @@ export default function App() {
                 onNavigate={handleNavigate}
                 onNotify={addToast}
                 onOpenUploadModal={() => setIsUploadModalOpen(true)}
-                onLoadDemoMode={handleLoadDemoMode}
               />
             )}
 
@@ -659,7 +735,6 @@ export default function App() {
                 onNotify={addToast}
                 onSaveModel={handleSaveModel}
                 onOpenUploadModal={() => setIsUploadModalOpen(true)}
-                onLoadDemoMode={handleLoadDemoMode}
               />
             )}
 
@@ -672,7 +747,6 @@ export default function App() {
                 queryHistory={queryHistory}
                 onLogQuery={handleLogQuery}
                 onOpenUploadModal={() => setIsUploadModalOpen(true)}
-                onLoadDemoMode={handleLoadDemoMode}
               />
             )}
 
@@ -685,29 +759,26 @@ export default function App() {
                 onNotify={addToast}
                 onGenerateReport={handleGenerateReport}
                 onOpenUploadModal={() => setIsUploadModalOpen(true)}
-                onLoadDemoMode={handleLoadDemoMode}
               />
             )}
 
             {currentView === 'settings' && (
               <SettingsView
-                isDemoMode={isDemoMode}
                 datasetCount={datasets.length}
                 analysisCount={analyses.length}
                 modelCount={models.length}
                 reportCount={reports.length}
-                onResetDemoData={handleResetDemoData}
-                onLoadDemoMode={handleLoadDemoMode}
-                onExitDemoMode={handleExitDemoMode}
                 onClearProductionData={handleClearProductionData}
                 onNotify={addToast}
               />
             )}
+
           </main>
         </div>
       </div>
 
       {/* Global Modals & Overlays */}
+
       <UploadDatasetModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
@@ -722,8 +793,11 @@ export default function App() {
         onSelectDataset={setSelectedDatasetId}
       />
 
-      {/* Toast Notification Container */}
-      <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
+      <ToastContainer
+        toasts={toasts}
+        onDismiss={handleDismissToast}
+      />
+
     </div>
   );
 }

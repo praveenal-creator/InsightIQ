@@ -1,4 +1,5 @@
-export type NavigationId = 
+
+export type NavigationId =
   | 'overview'
   | 'datasets'
   | 'ai-analyst'
@@ -14,16 +15,20 @@ export interface Dataset {
   id: string;
   name: string;
   description: string;
-  format: 'CSV' | 'Parquet' | 'Snowflake' | 'BigQuery' | 'JSON';
+  format: 'CSV' | 'XLSX' | 'XLS' | 'JSON';
   rows: number;
   columns: number;
   size: string;
   updatedAt: string;
-  healthScore: number;
+  healthScore: number | null;
   tags: string[];
   sampleData: Record<string, string | number>[];
-  schema: { name: string; type: string; nullable: boolean; uniqueCount: number }[];
-  isDemo?: boolean;
+  schema: {
+    name: string;
+    type: string;
+    nullable: boolean;
+    uniqueCount: number;
+  }[];
 }
 
 export interface Analysis {
@@ -39,7 +44,6 @@ export interface Analysis {
   metricChange: string;
   isPositive: boolean;
   actionableRecommendation: string;
-  isDemo?: boolean;
 }
 
 export interface ActivityItem {
@@ -50,7 +54,6 @@ export interface ActivityItem {
   action: string;
   target: string;
   type: 'upload' | 'clean' | 'query' | 'ai' | 'export';
-  isDemo?: boolean;
 }
 
 export interface NotificationItem {
@@ -61,14 +64,19 @@ export interface NotificationItem {
   read: boolean;
   type: 'alert' | 'insight' | 'system';
   linkTo?: NavigationId;
-  isDemo?: boolean;
 }
 
 export interface CleaningStep {
   id: string;
   name: string;
   column: string;
-  method: 'impute_mean' | 'impute_median' | 'drop_na' | 'remove_duplicates' | 'cap_outliers' | 'trim_whitespace';
+  method:
+    | 'impute_mean'
+    | 'impute_median'
+    | 'drop_na'
+    | 'remove_duplicates'
+    | 'cap_outliers'
+    | 'trim_whitespace';
   status: 'pending' | 'applied';
 }
 
@@ -82,14 +90,19 @@ export interface PredictiveModel {
   f1Score: number;
   datasetId?: string;
   datasetName?: string;
-  features: { name: string; importance: number; defaultVal?: number; min?: number; max?: number }[];
+  features: {
+    name: string;
+    importance: number;
+    defaultVal?: number;
+    min?: number;
+    max?: number;
+  }[];
   confusionMatrix: {
     truePositive: number;
     falsePositive: number;
     trueNegative: number;
     falseNegative: number;
   };
-  isDemo?: boolean;
 }
 
 export interface ReportItem {
@@ -104,7 +117,6 @@ export interface ReportItem {
   findings: string[];
   recommendations: string[];
   datasetName?: string;
-  isDemo?: boolean;
 }
 
 export interface SqlQueryRecord {
@@ -116,4 +128,3 @@ export interface SqlQueryRecord {
   status: '200 OK' | 'Error';
   errorMessage?: string;
 }
-

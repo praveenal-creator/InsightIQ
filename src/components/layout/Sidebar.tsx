@@ -1,17 +1,17 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Database, 
-  Sparkles, 
-  Table, 
-  Filter, 
-  BarChart3, 
-  Cpu, 
-  Terminal, 
-  FileSpreadsheet, 
-  Settings, 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  LayoutDashboard,
+  Database,
+  Sparkles,
+  Table,
+  Filter,
+  BarChart3,
+  Cpu,
+  Terminal,
+  FileSpreadsheet,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
   X,
   Layers
 } from 'lucide-react';

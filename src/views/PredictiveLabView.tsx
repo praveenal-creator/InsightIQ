@@ -1,31 +1,31 @@
+
 import React, { useState } from 'react';
-import { 
-  Cpu, 
-  Sliders, 
-  Activity, 
-  CheckCircle2, 
-  AlertTriangle, 
-  BarChart2, 
-  Sparkles, 
-  RotateCcw,
-  Zap,
-  TrendingDown,
-  TrendingUp,
+import {
+  Cpu,
+  Activity,
+  BarChart2,
+  Database,
   Plus,
-  Database
+  AlertCircle,
+  ShieldCheck,
+  Info,
+  ArrowRight
 } from 'lucide-react';
+
 import { PredictiveModel, Dataset, NavigationId } from '../types';
 import { EmptyState } from '../components/common/EmptyState';
-import { Modal } from '../components/common/Modal';
 
 interface PredictiveLabViewProps {
   models: PredictiveModel[];
   datasets: Dataset[];
   onNavigate: (view: NavigationId) => void;
-  onNotify: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
+  onNotify: (
+    title: string,
+    desc: string,
+    type: 'success' | 'info' | 'error'
+  ) => void;
   onSaveModel?: (newModel: PredictiveModel) => void;
   onOpenUploadModal?: () => void;
-  onLoadDemoMode?: () => void;
 }
 
 export const PredictiveLabView: React.FC<PredictiveLabViewProps> = ({
@@ -33,546 +33,408 @@ export const PredictiveLabView: React.FC<PredictiveLabViewProps> = ({
   datasets,
   onNavigate,
   onNotify,
-  onSaveModel,
-  onOpenUploadModal,
-  onLoadDemoMode
+  onOpenUploadModal
 }) => {
-  const [isTrainModalOpen, setIsTrainModalOpen] = useState(false);
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string>(datasets[0]?.id || '');
-  const [algorithmType, setAlgorithmType] = useState('Ensemble Random Forest (500 Estimators)');
-  const [selectedModelId, setSelectedModelId] = useState<string>(models[0]?.id || '');
+  const [selectedModelId, setSelectedModelId] = useState(
+    models[0]?.id || ''
+  );
 
-  // Active model
-  const activeModel = models.find(m => m.id === selectedModelId) || models[0];
+  const activeModel =
+    models.find(model => model.id === selectedModelId) || models[0];
 
-  // Dynamic what-if feature values based on active model's real features
-  const [featureValues, setFeatureValues] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = {};
-    activeModel?.features.forEach(f => {
-      initial[f.name] = f.defaultVal !== undefined ? f.defaultVal : 25;
-    });
-    return initial;
-  });
-
-  // Keep featureValues synced when activeModel changes
-  React.useEffect(() => {
-    if (activeModel) {
-      const updated: Record<string, number> = {};
-      activeModel.features.forEach(f => {
-        updated[f.name] = f.defaultVal !== undefined ? f.defaultVal : 25;
-      });
-      setFeatureValues(updated);
-    }
-  }, [activeModel?.id]);
-
-  const handleSliderChange = (name: string, val: number) => {
-    setFeatureValues(prev => ({ ...prev, [name]: val }));
+  const handleTrainingRequest = () => {
+    onNotify(
+      'Model Training Not Connected',
+      'The machine learning training backend is not integrated yet. No model has been trained or fabricated.',
+      'info'
+    );
   };
 
-  // Compute calculated risk/outcome probability dynamically from feature importance weights
-  const { simulatedPct, riskTier } = React.useMemo(() => {
-    if (!activeModel || activeModel.features.length === 0) {
-      return { simulatedPct: 50, riskTier: { label: 'Nominal', color: 'text-slate-300', border: 'border-slate-700', bg: 'bg-slate-900' } };
-    }
-
-    let score = 0.5;
-    activeModel.features.forEach(f => {
-      const currentVal = featureValues[f.name] !== undefined ? featureValues[f.name] : (f.defaultVal || 20);
-      const minVal = f.min !== undefined ? f.min : 0;
-      const maxVal = f.max !== undefined ? f.max : 100;
-      const normalized = Math.max(0, Math.min(1, (currentVal - minVal) / (maxVal - minVal || 1)));
-      // Inverse factor for features like tickets/risk vs logins
-      const isNegativeDriver = f.name.includes('ticket') || f.name.includes('risk') || f.name.includes('delay') || f.name.includes('vibration');
-      score += (isNegativeDriver ? (normalized - 0.5) : (0.5 - normalized)) * (f.importance * 0.8);
-    });
-
-    const finalPct = Math.max(5, Math.min(95, Math.round(score * 100)));
-
-    let tier = { label: 'Low Risk', color: 'text-emerald-400', border: 'border-emerald-500/40', bg: 'bg-emerald-950/30' };
-    if (finalPct >= 75) {
-      tier = { label: 'Critical Flight Risk', color: 'text-rose-500', border: 'border-rose-500', bg: 'bg-rose-950/60' };
-    } else if (finalPct >= 50) {
-      tier = { label: 'Moderate Risk', color: 'text-amber-400', border: 'border-amber-500/40', bg: 'bg-amber-950/30' };
-    }
-
-    return { simulatedPct: finalPct, riskTier: tier };
-  }, [activeModel, featureValues]);
-
-  // Train new model from actual dataset schema
-  const handleTrainNewModel = (e: React.FormEvent) => {
-    e.preventDefault();
-    const ds = datasets.find(d => d.id === selectedDatasetId) || datasets[0];
-    if (!ds) {
-      onNotify('Dataset Required', 'Upload a dataset first before training a model.', 'error');
-      return;
-    }
-
-    const numericFields = ds.schema.filter(s => s.type === 'INTEGER' || s.type === 'DECIMAL' || s.type === 'FLOAT');
-    const featuresList = numericFields.slice(0, 4).map((f, idx) => ({
-      name: f.name,
-      importance: Number((0.45 / (idx + 1)).toFixed(2)),
-      defaultVal: 20,
-      min: 0,
-      max: 100
-    }));
-
-    if (featuresList.length === 0) {
-      featuresList.push({ name: 'feature_index', importance: 1.0, defaultVal: 50, min: 0, max: 100 });
-    }
-
-    const newModel: PredictiveModel = {
-      id: `model-${Date.now()}`,
-      name: `${ds.name} Classifier (${algorithmType.split(' ')[0]})`,
-      algorithm: algorithmType,
-      targetMetric: ds.schema[ds.schema.length - 1]?.name || 'target_metric',
-      accuracy: Math.floor(Math.random() * 8) + 91,
-      rocAuc: Number((0.88 + Math.random() * 0.08).toFixed(3)),
-      f1Score: Number((0.86 + Math.random() * 0.09).toFixed(3)),
-      datasetId: ds.id,
-      datasetName: ds.name,
-      features: featuresList,
-      confusionMatrix: {
-        truePositive: Math.floor(ds.rows * 0.08) + 120,
-        falsePositive: 32,
-        trueNegative: Math.floor(ds.rows * 0.85) + 400,
-        falseNegative: 45
-      },
-      isDemo: ds.isDemo || false
-    };
-
-    if (onSaveModel) {
-      onSaveModel(newModel);
-    }
-    setSelectedModelId(newModel.id);
-    setIsTrainModalOpen(false);
-    onNotify('Model Trained', `Trained predictive classifier on ${ds.name} with ${newModel.rocAuc} ROC-AUC.`, 'success');
-  };
-
+  // Empty state
   if (!models || models.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-              <Cpu className="w-5 h-5 text-cyan-400" />
-              <span>Predictive Lab</span>
-            </h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Machine learning model evaluation and real-time inference simulators.
-            </p>
-          </div>
+        <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5">
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <Cpu className="w-5 h-5 text-cyan-400" />
+            Predictive Lab
+          </h1>
 
-          {datasets.length > 0 && (
-            <button
-              onClick={() => setIsTrainModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg shadow-sm transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Train First Model</span>
-            </button>
-          )}
+          <p className="text-xs text-slate-400 mt-1">
+            Machine learning model management and evaluation workspace.
+          </p>
         </div>
 
         <EmptyState
           icon={Cpu}
-          title="No predictive models trained yet"
+          title="No saved predictive models"
           description={
             datasets.length > 0
-              ? "You have active datasets ready in your workspace. Train a machine learning classifier to predict outcomes and simulate what-if scenarios."
-              : "No datasets found. Ingest your first dataset or load demo mode to train models and evaluate confusion matrices."
+              ? 'Your workspace contains datasets, but no trained predictive models are available yet. Connect a real machine learning training backend to create models.'
+              : 'Upload a dataset before starting your machine learning workflow.'
           }
-          actionLabel={datasets.length > 0 ? "Train Model Now" : "Upload Dataset"}
-          onAction={datasets.length > 0 ? () => setIsTrainModalOpen(true) : onOpenUploadModal}
+          actionLabel={
+            datasets.length > 0 ? 'Explore Datasets' : 'Upload Dataset'
+          }
+          onAction={
+            datasets.length > 0
+              ? () => onNavigate('datasets')
+              : onOpenUploadModal
+          }
         />
 
-        {onLoadDemoMode && (
-          <div className="text-center">
-            <button
-              onClick={onLoadDemoMode}
-              className="text-xs text-cyan-400 hover:text-cyan-300 underline underline-offset-4 cursor-pointer"
-            >
-              Or load sample models in Demo Mode
-            </button>
+        <div className="bg-[#0D1424] border border-amber-800/40 rounded-xl p-4 flex gap-3">
+          <Info className="w-5 h-5 text-amber-400 shrink-0" />
+
+          <div>
+            <h3 className="text-sm font-semibold text-amber-300">
+              Training integration pending
+            </h3>
+
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              Model training, validation metrics, confusion matrices and
+              prediction inference will be enabled after connecting the
+              Python machine learning backend. This workspace does not
+              generate simulated training results.
+            </p>
           </div>
-        )}
-
-        {/* Modal for Training */}
-        <Modal
-          isOpen={isTrainModalOpen}
-          onClose={() => setIsTrainModalOpen(false)}
-          title="Train New Predictive Model"
-          description="Build a supervised classifier based on actual columns in your dataset"
-        >
-          <form onSubmit={handleTrainNewModel} className="space-y-4 text-xs">
-            <div>
-              <label className="block text-slate-300 font-medium mb-1">Target Training Dataset</label>
-              <select
-                value={selectedDatasetId}
-                onChange={(e) => setSelectedDatasetId(e.target.value)}
-                className="w-full bg-[#090E1A] border border-slate-700/80 rounded-lg px-3 py-2 text-slate-100 focus:outline-none cursor-pointer"
-              >
-                {datasets.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.rows.toLocaleString()} rows)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-slate-300 font-medium mb-1">Algorithm Selection</label>
-              <select
-                value={algorithmType}
-                onChange={(e) => setAlgorithmType(e.target.value)}
-                className="w-full bg-[#090E1A] border border-slate-700/80 rounded-lg px-3 py-2 text-slate-100 focus:outline-none cursor-pointer"
-              >
-                <option value="Ensemble Random Forest (500 Estimators)">Ensemble Random Forest (500 Trees)</option>
-                <option value="XGBoost Gradient Boosting Classifier">XGBoost Gradient Boosted Trees</option>
-                <option value="Logistic Regression with L2 Regularization">Logistic Regression (L2 Elastic)</option>
-              </select>
-            </div>
-
-            <div className="p-3 bg-cyan-950/20 border border-cyan-800/40 rounded-lg text-slate-300">
-              <span className="font-semibold text-cyan-300">Automated Feature Engineering: </span>
-              Numerical features from the chosen dataset will be partitioned into 80/20 train/test splits.
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setIsTrainModalOpen(false)}
-                className="px-4 py-2 text-slate-400 hover:text-slate-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg shadow-sm"
-              >
-                Start Training
-              </button>
-            </div>
-          </form>
-        </Modal>
+        </div>
       </div>
     );
   }
 
+  if (!activeModel) {
+    return null;
+  }
+
   return (
     <div className="space-y-6">
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0D1424] border border-slate-800/80 rounded-xl p-5">
+
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-              <Cpu className="w-5 h-5 text-cyan-400" />
-              <span>Predictive Lab</span>
-            </h1>
-            <span className="text-xs px-2 py-0.5 bg-purple-950/80 text-purple-400 border border-purple-800/60 rounded font-mono">
-              Scikit-Learn & XGBoost Engine
-            </span>
-            {activeModel.isDemo && (
-              <span className="text-xs px-2 py-0.5 bg-amber-950/80 text-amber-400 border border-amber-800/60 rounded font-mono">
-                Sample Model
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Model validation metrics, Gini feature importance, and interactive inference sliders.
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <Cpu className="w-5 h-5 text-cyan-400" />
+            Predictive Lab
+          </h1>
+
+          <p className="text-xs text-slate-400 mt-1">
+            Saved model records and evaluation metadata.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
+
           <select
-            value={selectedModelId}
-            onChange={(e) => setSelectedModelId(e.target.value)}
-            className="px-3 py-1.5 bg-[#090E1A] border border-slate-800 rounded-lg text-xs text-slate-200 font-medium focus:outline-none cursor-pointer"
+            value={activeModel.id}
+            onChange={e => setSelectedModelId(e.target.value)}
+            className="px-3 py-2 bg-[#090E1A] border border-slate-800 rounded-lg text-xs text-slate-200 font-medium focus:outline-none"
           >
-            {models.map(m => (
-              <option key={m.id} value={m.id} className="bg-[#0D1424]">
-                {m.name}
+            {models.map(model => (
+              <option
+                key={model.id}
+                value={model.id}
+                className="bg-[#0D1424]"
+              >
+                {model.name}
               </option>
             ))}
           </select>
 
           <button
-            onClick={() => setIsTrainModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg transition-colors cursor-pointer"
+            onClick={handleTrainingRequest}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-400 bg-slate-800 rounded-lg cursor-not-allowed"
+            title="Requires machine learning backend integration"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Train Model</span>
+            Training unavailable
           </button>
+
         </div>
       </div>
 
-      {/* Model Benchmark Performance Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {/* Data provenance notice */}
+      <div className="bg-[#0D1424] border border-amber-800/40 rounded-xl p-4 flex gap-3">
+
+        <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+
+        <div>
+          <h3 className="text-xs font-semibold text-amber-300">
+            Evaluation metadata notice
+          </h3>
+
+          <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+            The following values are stored model metadata. This interface
+            does not independently verify training provenance or reproduce
+            model evaluation. Do not interpret these values as newly
+            validated training results.
+          </p>
+        </div>
+
+      </div>
+
+      {/* Model information */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
         <div className="p-4 bg-[#0D1424] border border-slate-800/80 rounded-xl">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-            ROC-AUC Score
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            Model Name
           </span>
-          <span className="text-2xl font-bold text-cyan-400 font-mono tabular-nums">
-            {activeModel.rocAuc.toFixed(3)}
-          </span>
-          <span className="text-[10px] text-emerald-400 block mt-0.5">Discrimination Score</span>
+
+          <p className="text-sm font-bold text-white mt-2 break-words">
+            {activeModel.name}
+          </p>
         </div>
 
         <div className="p-4 bg-[#0D1424] border border-slate-800/80 rounded-xl">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-            Overall Accuracy
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            Algorithm
           </span>
-          <span className="text-2xl font-bold text-white font-mono tabular-nums">
-            {activeModel.accuracy}%
-          </span>
-          <span className="text-[10px] text-slate-400 block mt-0.5">Test Partition (k-fold=5)</span>
+
+          <p className="text-sm font-bold text-white mt-2 break-words">
+            {activeModel.algorithm}
+          </p>
         </div>
 
         <div className="p-4 bg-[#0D1424] border border-slate-800/80 rounded-xl">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-            Weighted F1 Score
-          </span>
-          <span className="text-2xl font-bold text-white font-mono tabular-nums">
-            {activeModel.f1Score.toFixed(3)}
-          </span>
-          <span className="text-[10px] text-emerald-400 block mt-0.5">Harmonic Mean</span>
-        </div>
-
-        <div className="p-4 bg-[#0D1424] border border-slate-800/80 rounded-xl">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
             Dataset Source
           </span>
-          <span className="text-xs font-semibold text-slate-200 block truncate mt-1">
-            {activeModel.datasetName || 'Active Table'}
+
+          <p className="text-sm font-bold text-white mt-2">
+            {activeModel.datasetName || 'Not specified'}
+          </p>
+        </div>
+
+        <div className="p-4 bg-[#0D1424] border border-slate-800/80 rounded-xl">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            Target Metric
           </span>
-          <span className="text-[10px] text-purple-400 block mt-1 font-mono">Target: {activeModel.targetMetric}</span>
+
+          <p className="text-sm font-bold text-white mt-2">
+            {activeModel.targetMetric || 'Not specified'}
+          </p>
         </div>
+
       </div>
 
-      {/* 2-Column Section: Feature Importance & What-If Simulator */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left 6 Columns: Feature Importance & Confusion Matrix */}
-        <div className="lg:col-span-6 space-y-6">
-          <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-              <div className="flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-cyan-400" />
-                <h3 className="text-sm font-semibold text-slate-100">Gini Feature Importance</h3>
-              </div>
-              <span className="text-[11px] font-mono text-slate-400">Trained Weights</span>
-            </div>
+      {/* Stored evaluation metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
-            <div className="space-y-3">
-              {activeModel.features.map(f => (
-                <div key={f.name} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-slate-300">{f.name}</span>
-                    <span className="text-cyan-400 font-semibold tabular-nums">
-                      {(f.importance * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                  <div className="w-full h-2 bg-[#090E1A] rounded-full overflow-hidden border border-slate-800">
-                    <div
-                      className="h-full bg-cyan-400 rounded-full"
-                      style={{ width: `${Math.min(100, f.importance * 100)}%` }}
-                    />
-                  </div>
+        <div className="p-4 bg-[#0D1424] border border-slate-800/80 rounded-xl">
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-cyan-400" />
+            <span className="text-[11px] font-semibold text-slate-400 uppercase">
+              Recorded ROC-AUC
+            </span>
+          </div>
+
+          <p className="text-2xl font-bold text-cyan-400 font-mono mt-3">
+            {Number.isFinite(activeModel.rocAuc)
+              ? activeModel.rocAuc.toFixed(3)
+              : 'N/A'}
+          </p>
+        </div>
+
+        <div className="p-4 bg-[#0D1424] border border-slate-800/80 rounded-xl">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span className="text-[11px] font-semibold text-slate-400 uppercase">
+              Recorded Accuracy
+            </span>
+          </div>
+
+          <p className="text-2xl font-bold text-white font-mono mt-3">
+            {Number.isFinite(activeModel.accuracy)
+              ? `${activeModel.accuracy}%`
+              : 'N/A'}
+          </p>
+        </div>
+
+        <div className="p-4 bg-[#0D1424] border border-slate-800/80 rounded-xl">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-purple-400" />
+            <span className="text-[11px] font-semibold text-slate-400 uppercase">
+              Recorded F1 Score
+            </span>
+          </div>
+
+          <p className="text-2xl font-bold text-white font-mono mt-3">
+            {Number.isFinite(activeModel.f1Score)
+              ? activeModel.f1Score.toFixed(3)
+              : 'N/A'}
+          </p>
+        </div>
+
+      </div>
+
+      {/* Feature metadata */}
+      <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5 space-y-4">
+
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+
+          <div className="flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-cyan-400" />
+
+            <h3 className="text-sm font-semibold text-slate-100">
+              Stored Feature Metadata
+            </h3>
+          </div>
+
+          <span className="text-[10px] text-slate-500">
+            {activeModel.features.length} features
+          </span>
+
+        </div>
+
+        {activeModel.features.length === 0 ? (
+
+          <p className="text-xs text-slate-500 py-4">
+            No feature metadata is available for this model.
+          </p>
+
+        ) : (
+
+          <div className="space-y-4">
+
+            {activeModel.features.map(feature => (
+
+              <div key={feature.name} className="space-y-1">
+
+                <div className="flex items-center justify-between text-xs">
+
+                  <span className="text-slate-300 font-mono">
+                    {feature.name}
+                  </span>
+
+                  <span className="text-cyan-400 font-semibold font-mono">
+                    {(feature.importance * 100).toFixed(1)}%
+                  </span>
+
                 </div>
-              ))}
-            </div>
+
+                <div className="w-full h-2 bg-[#090E1A] rounded-full overflow-hidden border border-slate-800">
+
+                  <div
+                    className="h-full bg-cyan-400 rounded-full"
+                    style={{
+                      width: `${Math.max(
+                        0,
+                        Math.min(100, feature.importance * 100)
+                      )}%`
+                    }}
+                  />
+
+                </div>
+
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>Minimum: {feature.min ?? 'N/A'}</span>
+                  <span>Maximum: {feature.max ?? 'N/A'}</span>
+                </div>
+
+              </div>
+
+            ))}
+
           </div>
 
-          <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-purple-400" />
-                <h3 className="text-sm font-semibold text-slate-100">Holdout Confusion Matrix</h3>
-              </div>
-              <span className="text-[11px] text-slate-400 font-mono">Validation Split</span>
-            </div>
+        )}
 
-            <div className="grid grid-cols-2 gap-3 text-xs font-mono text-center">
-              <div className="p-3 bg-emerald-950/20 border border-emerald-800/40 rounded-lg">
-                <span className="text-[10px] text-emerald-300 uppercase block">True Negative</span>
-                <span className="text-lg font-bold text-white tabular-nums">
-                  {activeModel.confusionMatrix.trueNegative.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-emerald-400 block mt-0.5">Correct Retention</span>
-              </div>
-
-              <div className="p-3 bg-rose-950/20 border border-rose-800/40 rounded-lg">
-                <span className="text-[10px] text-rose-300 uppercase block">False Positive</span>
-                <span className="text-lg font-bold text-white tabular-nums">
-                  {activeModel.confusionMatrix.falsePositive.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">Type I Error</span>
-              </div>
-
-              <div className="p-3 bg-rose-950/20 border border-rose-800/40 rounded-lg">
-                <span className="text-[10px] text-rose-300 uppercase block">False Negative</span>
-                <span className="text-lg font-bold text-white tabular-nums">
-                  {activeModel.confusionMatrix.falseNegative.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">Type II Error</span>
-              </div>
-
-              <div className="p-3 bg-cyan-950/20 border border-cyan-800/40 rounded-lg">
-                <span className="text-[10px] text-cyan-300 uppercase block">True Positive</span>
-                <span className="text-lg font-bold text-white tabular-nums">
-                  {activeModel.confusionMatrix.truePositive.toLocaleString()}
-                </span>
-                <span className="text-[10px] text-cyan-400 block mt-0.5">Correct Prediction</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right 6 Columns: Interactive Inference Simulator */}
-        <div className="lg:col-span-6 bg-[#0D1424] border border-slate-800/80 rounded-xl p-5 space-y-6 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-              <div className="flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-cyan-400" />
-                <h3 className="text-sm font-semibold text-slate-100">Live What-If Inference Simulator</h3>
-              </div>
-              <button
-                onClick={() => {
-                  const resetMap: Record<string, number> = {};
-                  activeModel.features.forEach(f => {
-                    resetMap[f.name] = f.defaultVal || 25;
-                  });
-                  setFeatureValues(resetMap);
-                }}
-                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-cyan-300 cursor-pointer"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>Reset</span>
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-              Tweak actual model features below to calculate real-time probability impact on <strong className="text-slate-200">{activeModel.targetMetric}</strong>.
-            </p>
-
-            {/* Sliders matching this model's actual features */}
-            <div className="space-y-4 mt-5">
-              {activeModel.features.map(f => {
-                const val = featureValues[f.name] !== undefined ? featureValues[f.name] : (f.defaultVal || 25);
-                const min = f.min !== undefined ? f.min : 0;
-                const max = f.max !== undefined ? f.max : 100;
-
-                return (
-                  <div key={f.name} className="space-y-1.5">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-300 font-mono">{f.name}</span>
-                      <span className="font-mono text-cyan-300 font-bold tabular-nums">
-                        {val}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={min}
-                      max={max}
-                      value={val}
-                      onChange={(e) => handleSliderChange(f.name, Number(e.target.value))}
-                      className="w-full accent-cyan-400 bg-slate-800 h-1.5 rounded-lg cursor-pointer"
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Dynamic Probability Gauge */}
-          <div className={`p-5 rounded-xl border ${riskTier.border} ${riskTier.bg} transition-all duration-300 space-y-3`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                  Simulated Outcome
-                </span>
-                <h4 className={`text-base font-bold ${riskTier.color}`}>{riskTier.label}</h4>
-              </div>
-
-              <div className="text-right">
-                <span className="text-3xl font-extrabold font-mono text-white tabular-nums">
-                  {simulatedPct}%
-                </span>
-                <span className="text-[10px] text-slate-400 block">Model Confidence</span>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-800/80 text-xs text-slate-300 leading-relaxed">
-              {simulatedPct > 60 ? (
-                <span>
-                  High probability state: Parameter values indicate significant risk weighting on {activeModel.targetMetric}. Recommended intervention advised.
-                </span>
-              ) : (
-                <span>
-                  Nominal operating parameter range: Low risk index on {activeModel.targetMetric}.
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* Train Model Dialog */}
-      <Modal
-        isOpen={isTrainModalOpen}
-        onClose={() => setIsTrainModalOpen(false)}
-        title="Train New Predictive Model"
-        description="Select an uploaded dataset in your workspace to train a new model"
-      >
-        <form onSubmit={handleTrainNewModel} className="space-y-4 text-xs">
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">Target Training Dataset</label>
-            <select
-              value={selectedDatasetId}
-              onChange={(e) => setSelectedDatasetId(e.target.value)}
-              className="w-full bg-[#090E1A] border border-slate-700/80 rounded-lg px-3 py-2 text-slate-100 focus:outline-none cursor-pointer"
-            >
-              {datasets.map(d => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({d.rows.toLocaleString()} rows)
-                </option>
-              ))}
-            </select>
+      {/* Stored confusion matrix */}
+      <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5 space-y-4">
+
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+          <Database className="w-4 h-4 text-purple-400" />
+
+          <h3 className="text-sm font-semibold text-slate-100">
+            Stored Confusion Matrix
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 text-center">
+
+          <div className="p-4 bg-emerald-950/20 border border-emerald-800/40 rounded-lg">
+            <span className="text-[10px] text-emerald-300 uppercase block">
+              True Negative
+            </span>
+
+            <span className="text-xl font-bold text-white font-mono">
+              {activeModel.confusionMatrix.trueNegative.toLocaleString()}
+            </span>
           </div>
 
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">Algorithm Selection</label>
-            <select
-              value={algorithmType}
-              onChange={(e) => setAlgorithmType(e.target.value)}
-              className="w-full bg-[#090E1A] border border-slate-700/80 rounded-lg px-3 py-2 text-slate-100 focus:outline-none cursor-pointer"
-            >
-              <option value="Ensemble Random Forest (500 Estimators)">Ensemble Random Forest (500 Trees)</option>
-              <option value="XGBoost Gradient Boosting Classifier">XGBoost Gradient Boosted Trees</option>
-              <option value="Logistic Regression with L2 Regularization">Logistic Regression (L2 Elastic)</option>
-            </select>
+          <div className="p-4 bg-rose-950/20 border border-rose-800/40 rounded-lg">
+            <span className="text-[10px] text-rose-300 uppercase block">
+              False Positive
+            </span>
+
+            <span className="text-xl font-bold text-white font-mono">
+              {activeModel.confusionMatrix.falsePositive.toLocaleString()}
+            </span>
           </div>
 
-          <div className="p-3 bg-cyan-950/20 border border-cyan-800/40 rounded-lg text-slate-300">
-            <span className="font-semibold text-cyan-300">Automated Training Pipeline: </span>
-            Features from the selected table will be extracted, normalized, and trained.
+          <div className="p-4 bg-rose-950/20 border border-rose-800/40 rounded-lg">
+            <span className="text-[10px] text-rose-300 uppercase block">
+              False Negative
+            </span>
+
+            <span className="text-xl font-bold text-white font-mono">
+              {activeModel.confusionMatrix.falseNegative.toLocaleString()}
+            </span>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={() => setIsTrainModalOpen(false)}
-              className="px-4 py-2 text-slate-400 hover:text-slate-200"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg shadow-sm"
-            >
-              Start Training
-            </button>
+          <div className="p-4 bg-cyan-950/20 border border-cyan-800/40 rounded-lg">
+            <span className="text-[10px] text-cyan-300 uppercase block">
+              True Positive
+            </span>
+
+            <span className="text-xl font-bold text-white font-mono">
+              {activeModel.confusionMatrix.truePositive.toLocaleString()}
+            </span>
           </div>
-        </form>
-      </Modal>
+
+        </div>
+
+      </div>
+
+      {/* Training integration status */}
+      <div className="bg-[#0D1424] border border-slate-800/80 rounded-xl p-5">
+
+        <div className="flex items-center gap-3">
+
+          <div className="w-10 h-10 rounded-lg bg-cyan-950/40 flex items-center justify-center">
+            <Cpu className="w-5 h-5 text-cyan-400" />
+          </div>
+
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-white">
+              Machine Learning Backend
+            </h3>
+
+            <p className="text-xs text-slate-400 mt-1">
+              Real model training and prediction integration is pending.
+            </p>
+          </div>
+
+          <span className="text-[10px] px-2 py-1 rounded bg-amber-950/40 text-amber-400 border border-amber-800/40">
+            Not Connected
+          </span>
+
+        </div>
+
+        <button
+          onClick={() => onNavigate('datasets')}
+          className="mt-4 text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+        >
+          View available datasets
+          <ArrowRight className="w-3 h-3" />
+        </button>
+
+      </div>
+
     </div>
   );
 };
