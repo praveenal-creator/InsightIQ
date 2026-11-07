@@ -171,7 +171,8 @@ async def upload_dataset(
         )
 
         if db_response.status_code not in (200, 201):
-            await client.delete(
+            cleanup_response = await client.request(
+                "DELETE",
                 f"{SUPABASE_URL}/storage/v1/object/{BUCKET}",
                 headers={
                     **headers,
@@ -179,6 +180,14 @@ async def upload_dataset(
                 },
                 json={"prefixes": [storage_path]},
             )
+
+            if cleanup_response.status_code not in (200, 204):
+                logger.error(
+                    "Upload cleanup failed. Status=%s Response=%s",
+                    cleanup_response.status_code,
+                    cleanup_response.text[:1000],
+                )
+
             raise RuntimeError("Dataset metadata could not be saved.")
 
     return _dataset_from_record(db_response.json()[0])
@@ -327,7 +336,8 @@ async def delete_dataset(
     headers = _headers(access_token)
 
     async with httpx.AsyncClient(timeout=60.0) as client:
-        storage_response = await client.delete(
+        storage_response = await client.request(
+            "DELETE",
             f"{SUPABASE_URL}/storage/v1/object/{BUCKET}",
             headers={
                 **headers,
