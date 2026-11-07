@@ -23,6 +23,14 @@ export interface ApiError {
 export const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.json'];
 export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || ''
+).replace(/\/+$/, '');
+
+function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`;
+}
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data, error } = await supabase.auth.getSession();
 
@@ -125,7 +133,7 @@ export async function uploadDatasetFile(
       });
     }
 
-    xhr.open('POST', '/api/datasets/upload');
+    xhr.open('POST', apiUrl('/api/datasets/upload'));
     xhr.setRequestHeader('Authorization', authHeaders.Authorization);
 
     xhr.onload = () => {
@@ -162,7 +170,7 @@ export async function listDatasetsFromApi(
     : '/api/datasets';
 
   const headers = await getAuthHeaders();
-  const res = await fetch(url, { headers });
+  const res = await fetch(apiUrl(url), { headers });
 
   if (!res.ok) {
     const errorJson = await res.json().catch(() => ({}));
@@ -181,7 +189,7 @@ export async function fetchDatasetPreview(
   const headers = await getAuthHeaders();
 
   const res = await fetch(
-    `/api/datasets/${encodeURIComponent(datasetId)}/preview?page=${page}&page_size=${pageSize}`,
+    apiUrl(`/api/datasets/${encodeURIComponent(datasetId)}/preview?page=${page}&page_size=${pageSize}`),
     { headers }
   );
 
@@ -201,7 +209,7 @@ export async function renameDatasetApi(
   const authHeaders = await getAuthHeaders();
 
   const res = await fetch(
-    `/api/datasets/${encodeURIComponent(datasetId)}/rename`,
+    apiUrl(`/api/datasets/${encodeURIComponent(datasetId)}/rename`),
     {
       method: 'PATCH',
       headers: {
@@ -229,7 +237,7 @@ export async function deleteDatasetApi(
   const headers = await getAuthHeaders();
 
   const res = await fetch(
-    `/api/datasets/${encodeURIComponent(datasetId)}`,
+    apiUrl(`/api/datasets/${encodeURIComponent(datasetId)}`),
     {
       method: 'DELETE',
       headers
