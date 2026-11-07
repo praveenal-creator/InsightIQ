@@ -1,6 +1,8 @@
+
 import io
 import json
 import os
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -18,6 +20,8 @@ from backend.storage import (
 )
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
+logger = logging.getLogger(__name__)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
@@ -113,8 +117,10 @@ async def upload_dataset(
         })
 
     health_score = round(
-        100 * (1 - dataframe.isnull().sum().sum() /
-        max(1, dataframe.size))
+        100 * (
+            1 - dataframe.isnull().sum().sum()
+            / max(1, dataframe.size)
+        )
     )
 
     now = datetime.now(timezone.utc).isoformat()
@@ -312,6 +318,11 @@ async def delete_dataset(
     user_id: str,
     access_token: str,
 ) -> None:
+    logger.info(
+        "Starting deletion for dataset_id=%s",
+        dataset_id,
+    )
+
     record = await get_dataset(dataset_id, user_id, access_token)
     headers = _headers(access_token)
 
@@ -326,7 +337,17 @@ async def delete_dataset(
         )
 
         if storage_response.status_code not in (200, 204):
+            logger.error(
+                "Supabase Storage deletion failed. Status=%s Response=%s",
+                storage_response.status_code,
+                storage_response.text[:1000],
+            )
             raise RuntimeError("Could not delete dataset file.")
+
+        logger.info(
+            "Storage file deleted successfully for dataset_id=%s",
+            dataset_id,
+        )
 
         db_response = await client.delete(
             f"{SUPABASE_URL}/rest/v1/insightiq_datasets",
@@ -338,4 +359,16 @@ async def delete_dataset(
         )
 
     if db_response.status_code not in (200, 204):
-        raise RuntimeError("File deleted, but dataset metadata could not be deleted.")
+        logger.error(
+            "Supabase database deletion failed. Status=%s Response=%s",
+            db_response.status_code,
+            db_response.text[:1000],
+        )
+        raise RuntimeError(
+            "File deleted, but dataset metadata could not be deleted."
+        )
+
+    logger.info(
+        "Dataset deletion completed successfully: %s",
+        dataset_id,
+    )
