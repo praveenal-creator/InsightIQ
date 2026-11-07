@@ -1,4 +1,5 @@
 
+import logging
 from typing import List, Optional
 
 from fastapi import (
@@ -20,6 +21,9 @@ from backend.models import (
 )
 from backend.auth import get_current_user
 from backend import supabase_storage, storage
+
+
+logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
@@ -257,6 +261,10 @@ async def delete_dataset_endpoint(
         raise HTTPException(status_code=404, detail="Dataset not found.")
 
     except Exception:
+        logger.exception(
+            "Dataset deletion failed for dataset_id=%s",
+            dataset_id,
+        )
         raise HTTPException(
             status_code=502,
             detail="Could not delete dataset.",
