@@ -10,9 +10,12 @@ The project aims to simplify data analysis by combining dataset management, data
 
 **Backend API:** https://insightiq-api-fhvk.onrender.com
 
+**GitHub Repository:** https://github.com/praveenal-creator/InsightIQ
+
 ## ✨ Features
 
 ### Implemented
+
 - User authentication using Supabase.
 - Dataset upload supporting CSV, XLSX, XLS, and JSON.
 - Cloud dataset storage using Supabase Storage.
@@ -25,6 +28,7 @@ The project aims to simplify data analysis by combining dataset management, data
 - Responsive analytics interface.
 
 ### Planned / In Progress
+
 - AI-generated executive summaries.
 - Automated analytical findings.
 - AI-powered recommendations.
@@ -45,39 +49,31 @@ The project aims to simplify data analysis by combining dataset management, data
 | Backend Hosting | Render |
 | Version Control | Git & GitHub |
 
-## 🌐 Deployment
+## 🌐 Deployment Architecture
 
-- Frontend: Cloudflare Workers
-- Backend: Render
-- Database and authentication: Supabase
+- **Frontend:** Cloudflare Workers
+- **Backend:** Render
+- **Database:** Supabase
+- **Authentication:** Supabase Auth
+- **File Storage:** Supabase Storage
 
 ## 📌 Project Status
 
-InsightIQ is an actively developed project. Core dataset management and cloud integration features are implemented. AI-powered reporting capabilities are planned for future development.
+InsightIQ is an actively developed project. Core dataset management, authentication, cloud storage integration, and data exploration features are implemented.
 
-MIT License
+AI-powered reporting capabilities are planned for future development.
 
-Copyright (c) 2026 praveena
+## 📄 License
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This project is licensed under the MIT License.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+See the [LICENSE](LICENSE) file for details.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Copyright (c) 2026 praveenal-creator
 
-GitHub: https://github.com/praveenal-creator
+## 👨‍💻 Developer
+
+**GitHub:** [praveenal-creator](https://github.com/praveenal-creator)
 
 ---
 
